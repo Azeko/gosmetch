@@ -1,7 +1,6 @@
 import os
-from database.asyncdatabase import (
+from database import (
     api_tx,
-    check_connections_forever,
     row_str,
     row_str_or_none,
 )
@@ -102,8 +101,7 @@ from service.chat.audiomessage import (
     transcode_and_put,
 )
 import redis.asyncio as redis
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import WebSocket, WebSocketDisconnect
 import json
 from constants import (
     MAX_NOTIFICATION_LENGTH,
@@ -112,8 +110,6 @@ from util import truncate_text
 from service.chat.verification import (
     verification_required,
 )
-
-app = FastAPI()
 
 # Global publisher connection, created once per worker.
 REDIS_HOST: str = os.environ.get("DUO_REDIS_HOST", "redis")
@@ -698,7 +694,7 @@ async def process_text(
     async def store_audio_and_notify() -> None:
         if \
                 isinstance(maybe_message, AudioMessage) and \
-                not transcode_and_put(
+                not await transcode_and_put(
                     uuid=maybe_message.audio_uuid,
                     audio_base64=maybe_message.audio_base64,
                 ):
@@ -783,7 +779,6 @@ async def process_text(
     return None
 
 
-@app.websocket("/")
 async def process_websocket_messages(websocket: WebSocket) -> None:
     subprotocol_header = websocket.headers.get('sec-websocket-protocol')
 

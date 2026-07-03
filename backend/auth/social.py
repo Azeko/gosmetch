@@ -26,11 +26,11 @@ from jwt import PyJWKClient
 from google.auth.transport.requests import Request as _GoogleRequest
 from google.oauth2 import id_token as _google_id_token
 
-from service.api.decorators import enable_mocking
+from service.api.mocking import enable_mocking
 
 
 # Bound on JWKS / certs HTTP fetches. Without this, a slow upstream pins
-# a gunicorn worker indefinitely on the cold-start fetch.
+# a worker indefinitely on the cold-start fetch.
 _PROVIDER_HTTP_TIMEOUT_SECONDS = 5
 
 

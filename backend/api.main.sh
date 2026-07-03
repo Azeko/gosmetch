@@ -5,6 +5,9 @@ cd "$script_dir"
 
 set -e
 
+# Cap on WebSocket frames for the /chat endpoint; keep in sync with chat.main.sh.
+WS_MAX_SIZE=10485760  # 10 MB
+
 export PYTHONUNBUFFERED=true
 export PYTHONDONTWRITEBYTECODE=true
 export PYTHONPATH=.
@@ -29,19 +32,26 @@ fi
 if [ "$DUO_ENV" = "prod" ]
 then
   python3 database/initapi.py
-  exec gunicorn \
+  exec uvicorn \
+    --host 0.0.0.0 \
+    --port "$PORT" \
+    --ws-max-size "${WS_MAX_SIZE}" \
     --workers "${DUO_WORKERS:-4}" \
-    --bind "0.0.0.0:$PORT" \
-    --timeout 0 \
+    --proxy-headers \
+    --forwarded-allow-ips '*' \
     service.api:app
 elif [ "$DUO_ENV" = "dev" ]
 then
   python3 database/initapi.py
-  exec flask \
-    --app service.api:app \
-    --debug run \
+  exec uvicorn \
     --host 0.0.0.0 \
-    --port "$PORT"
+    --port "$PORT" \
+    --ws-max-size "${WS_MAX_SIZE}" \
+    --proxy-headers \
+    --forwarded-allow-ips '*' \
+    --reload \
+    --reload-exclude 'venv/*' \
+    service.api:app
 else
   echo "The environment variable DUO_ENV must be set and have the value 'dev' or 'prod'"
 fi

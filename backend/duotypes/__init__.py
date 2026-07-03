@@ -32,11 +32,7 @@ import base64
 import binascii
 from duoaudio import transcode_and_trim_audio_from_base64
 import traceback
-import antiabuse.antirude.displayname
-import antiabuse.antirude.education
-import antiabuse.antirude.occupation
 import antiabuse.antirude.profile
-import antiabuse.bannedphoto
 from antiabuse.antispam.urldetector import has_url
 from antiabuse.antispam.phonenumberdetector import detect_phone_numbers
 from antiabuse.antispam.solicitation import has_solicitation
@@ -135,6 +131,20 @@ MIN_PHOTO_POSITION = 1
 MAX_PHOTO_POSITION = 7
 
 
+class FieldValidationError(Exception):
+    """Reject a single request field from outside a pydantic validator.
+
+    Some checks (e.g. the async anti-abuse lookups in `person`) can't run inside
+    a synchronous pydantic validator, so they raise this instead. The API
+    renders it to the client exactly like a pydantic field-validation failure;
+    see `service/api/errors.py`."""
+
+    def __init__(self, field: str, message: str) -> None:
+        super().__init__(message)
+        self.field = field
+        self.message = message
+
+
 def validate_gif_dimensions(larger_dim: int, smaller_dim: int) -> None:
     if larger_dim > MAX_GIF_DIM:
         raise ValueError(
@@ -195,7 +205,6 @@ class Base64AudioFile(BaseModel):
         values['transcoded'] = transcoded
 
         return values
-
     class Config:
         arbitrary_types_allowed = True
 
@@ -241,8 +250,10 @@ class Base64File(BaseModel):
             raise ValueError(f'Image invalid')
 
         md5_hash = md5(base64_value)
-        if antiabuse.bannedphoto.is_banned_photo(md5_hash):
-            raise ValueError("That pic breaks the rules 🙈")
+
+        # The banned-photo check needs the async DB, which pydantic validators
+        # can't await, so every handler accepting a Base64File must run it
+        # itself (via person._reject_rude_or_banned).
 
         width, height = image.size
 
@@ -440,13 +451,8 @@ class PatchOnboardeeInfo(BaseModel):
             raise ValueError('Age must be 18 or up')
         return date_of_birth
 
-    @field_validator('name')
-    def name_must_not_be_rude(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        if antiabuse.antirude.displayname.is_rude(value):
-            raise ValueError('Too rude')
-        return value
+    # The rude-name check needs the async DB, so it runs in the handler
+    # (person.patch_onboardee_info), not here — see Base64File above.
 
     @model_validator(mode='after')
     def check_exactly_one(self) -> "PatchOnboardeeInfo":
@@ -463,18 +469,6 @@ class PatchOnboardeeInfo(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
-
-
-class DeleteOnboardeeInfo(BaseModel):
-    files: List[int]
-
-    @field_validator("files")
-    @classmethod
-    def validate_files(cls, files: List[int]) -> List[int]:
-        for pos in files:
-            if not (MIN_PHOTO_POSITION <= pos <= MAX_PHOTO_POSITION):
-                raise ValueError("Invalid photo position")
-        return files
 
 
 class DeleteProfileInfo(BaseModel):
@@ -584,13 +578,9 @@ class PatchProfileInfo(BaseModel):
 
         return values
 
-    @field_validator('name')
-    def name_must_not_be_rude(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        if antiabuse.antirude.displayname.is_rude(value):
-            raise ValueError('Too rude')
-        return value
+    # The name/occupation/education rude checks need the async DB, so they run
+    # in the handler (person.patch_profile_info), not here. The `about`
+    # rude/spam checks below stay: they're pure and don't touch the DB.
 
     @field_validator('about')
     def about_must_not_be_rude(cls, value: Optional[str]) -> Optional[str]:
@@ -609,22 +599,6 @@ class PatchProfileInfo(BaseModel):
                 detect_phone_numbers(value) or \
                 has_solicitation(value):
             raise ValueError('Spam')
-        return value
-
-    @field_validator('occupation')
-    def occupation_must_not_be_rude(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        if antiabuse.antirude.occupation.is_rude(value):
-            raise ValueError('Too rude')
-        return value
-
-    @field_validator('education')
-    def education_must_not_be_rude(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        if antiabuse.antirude.education.is_rude(value):
-            raise ValueError('Too rude')
         return value
 
     class Config:
@@ -788,7 +762,3 @@ class PostRevenuecat(BaseModel):
                 values['raw_event_error'] = str(e)
                 values['event'] = None
         return values
-
-
-class PostMarkVisitorsChecked(BaseModel):
-    time: Optional[datetime] = None

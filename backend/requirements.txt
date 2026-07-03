@@ -2,11 +2,9 @@ blurhash
 boto3==1.35.99
 confusable-homoglyphs
 fastapi
-Flask
-flask-cors
-Flask-Limiter
 google-auth
-gunicorn
+httpx
+limits[async-redis]
 lxml
 nltk
 numpy
@@ -15,7 +13,7 @@ onnxruntime
 openai
 Pillow
 pillow-heif
-psycopg[binary]
+psycopg[binary,pool]
 pydantic[email]
 PyJWT[crypto]
 pytricia

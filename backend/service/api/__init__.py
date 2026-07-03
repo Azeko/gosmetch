@@ -1,643 +1,526 @@
-from pathlib import Path
-from typing import Optional
-from flask import request
+"""The API service's HTTP routes.
+
+Each `@app.<method>` handler is a thin adapter: it pulls typed inputs and the
+authenticated session off the request, delegates to a business module
+(`person`, `search`, `qanda`, ...), and returns a plain value that `DuoRoute`
+renders into a `Response`. The `app` itself (middleware, auth, rate limiting,
+lifespan) is assembled in `service.api.asgi`; database bootstrap/migration lives
+in `service.api.bootstrap`.
+"""
+
+import json
+import time
+from urllib.parse import parse_qsl
+
+from fastapi import Body, Depends, Path as FastApiPath, WebSocket
+from starlette.requests import Request
+
 import duotypes as t
 import location
 import person
 import qanda
-from qanda import question
 import search
+from antiabuse.lodgereport import skip_by_uuid
 from auth import apple_oauth
-from database import api_tx
-import psycopg
-from service.api.decorators import (
-    app,
-    adelete,
-    aget,
-    apatch,
-    apost,
-    aput,
+from qanda import question
+from service.api.asgi import app
+from service.api.auth import session
+from service.api.ratelimit import (
     auth_rate_limit,
-    delete,
-    get,
-    patch,
-    post,
-    put,
-    validate,
-    limiter,
-    shared_otp_limit,
-    disable_ip_rate_limit,
-    disable_account_rate_limit,
-    limiter_account,
+    client_ip,
+    default_limits,
+    shared_otp_limit_dependency,
+    ip_rate_limit,
+    account_rate_limit,
+    ip_and_account_rate_limit,
+    check_ip_and_account,
+    search_rate_limit,
+    report_rate_limit,
+    verify_rate_limit,
+    export_data_rate_limit,
 )
-import time
-from antiabuse.antispam.signupemail import normalize_email
-import json
-
-_init_sql_file = (
-    Path(__file__).parent.parent.parent / 'init-api.sql')
-
-_migrations_sql_file = (
-    Path(__file__).parent.parent.parent / 'migrations.sql')
-
-_email_domains_bad_file = (
-    Path(__file__).parent.parent.parent / 'email-domains-bad.sql')
-
-_email_domains_good_file = (
-    Path(__file__).parent.parent.parent / 'email-domains-good.sql')
-
-_banned_club_file = (
-    Path(__file__).parent.parent.parent / 'banned-club.sql')
+from service.api.routing import rate_limit_exempt
+from service.chat import process_websocket_messages
+from util.coerce import string
 
 def get_ttl_hash(seconds: int = 10) -> int:
-    """Return the same value withing `seconds` time period"""
+    """Return a value that stays constant within each `seconds`-long window, so
+    a `@lru_cache`d function keyed on it recomputes at most once per window."""
     return round(time.time() / seconds)
 
-def migrate_unnormalized_emails() -> None:
-    """
-    It'll probably be necessary to call this function again if/when
-    `normalize_email` normalizes more address.
-    """
-    with api_tx() as tx:
-        q = "SELECT 1 FROM person WHERE normalized_email ILIKE '%@googlemail.com' LIMIT 1"
-        if tx.execute(q).fetchone():
-            print('Unnormalized emails found. Normalizing...')
-        else:
-            print('Emails already normalized. Not performing normalization.')
-            return
+@app.post('/request-otp')
+async def post_request_otp(
+    request: Request,
+    req: t.PostRequestOtp,
+    _shared_limited: None = Depends(shared_otp_limit_dependency),
+) -> object:
+    return await person.post_request_otp(req, client_ip(request))
 
-    with api_tx() as tx:
-        print('Selecting emails')
-        q = "SELECT email FROM person"
-        tx.execute('SET LOCAL statement_timeout = 300000') # 5 minutes
-        rows = tx.execute(q).fetchall()
-        print('Done selecting emails')
+@app.post('/resend-otp')
+async def post_resend_otp(
+    request: Request,
+    _shared_limited: None = Depends(shared_otp_limit_dependency),
+    s: t.SessionInfo = Depends(session(
+        expected_onboarding_status=None,
+        expected_sign_in_status=False,
+    )),
+) -> object:
+    return await person.post_resend_otp(s, client_ip(request))
 
-    print('Computing normalized emails')
-    params_seq = [
-        row | dict(normalized_email=normalize_email(row['email']))
-        for row in rows
-    ]
-    print('Done computing normalized emails')
+@app.post('/check-otp')
+async def post_check_otp(
+    request: Request,
+    req: t.PostCheckOtp,
+    s: t.SessionInfo = Depends(session(
+        expected_onboarding_status=None,
+        expected_sign_in_status=False,
+    )),
+    _limited: None = Depends(ip_and_account_rate_limit(
+        auth_rate_limit,
+        scope='check_otp',
+    )),
+) -> object:
+    return await person.post_check_otp(req, s, client_ip(request))
 
-    with api_tx('read committed') as tx:
-        q = """
-        UPDATE person SET
-        normalized_email = %(normalized_email)s
-        WHERE email = %(email)s
-        """
-        print('Updating normalized emails in `person` table')
-        tx.execute('SET LOCAL statement_timeout = 300000') # 5 minutes
-        tx.executemany(q, params_seq)
-        print('Done updating normalized emails in `person` table')
+@app.post('/sign-in-with-google')
+async def post_sign_in_with_google(
+    request: Request,
+    req: t.PostSignInWithGoogle,
+    _limited: None = Depends(ip_rate_limit(
+        auth_rate_limit,
+        scope='social_sign_in',
+    )),
+) -> object:
+    return await person.post_sign_in_with_google(
+        token=req.id_token,
+        pending_club_name=req.pending_club_name,
+        remote_addr=client_ip(request),
+    )
 
-        q = """
-        UPDATE banned_person bp
-        SET
-            normalized_email = %(normalized_email)s
-        WHERE
-            normalized_email = %(email)s
-        AND NOT EXISTS (
-            SELECT
-                1
-            FROM
-                banned_person
-            WHERE
-                normalized_email = %(normalized_email)s
-            AND
-                ip_address = bp.ip_address
-        )
-        """
-        print('Updating normalized emails in `banned_person` table')
-        tx.executemany(q, params_seq)
-        print('Done updating normalized emails in `banned_person` table')
+@app.post('/sign-in-with-apple')
+async def post_sign_in_with_apple(
+    request: Request,
+    req: t.PostSignInWithApple,
+    _limited: None = Depends(ip_rate_limit(
+        auth_rate_limit,
+        scope='social_sign_in',
+    )),
+) -> object:
+    return await person.post_sign_in_with_apple(
+        token=req.identity_token,
+        nonce=req.nonce,
+        pending_club_name=req.pending_club_name,
+        remote_addr=client_ip(request),
+    )
 
-def maybe_run_init() -> None:
-    with api_tx() as tx:
-        row = tx.require_one("SELECT to_regclass('person')")
-
-    if row ['to_regclass'] is not None:
-        print('Database already initialized')
-        return
-
-    with open(_init_sql_file, 'r') as f:
-        init_sql_file = f.read()
-
-    with api_tx() as tx:
-        tx.execute(init_sql_file)
-
-def init_db() -> None:
-    with open(_migrations_sql_file, 'r') as f:
-        migrations_sql_file = f.read()
-
-    with open(_email_domains_bad_file, 'r') as f:
-        email_domains_bad_file = f.read()
-
-    with open(_email_domains_good_file, 'r') as f:
-        email_domains_good_file = f.read()
-
-    with open(_banned_club_file, 'r') as f:
-        banned_club_file = f.read()
-
-    maybe_run_init()
-
-    with api_tx() as tx:
-        tx.execute('SET LOCAL statement_timeout = 300000') # 5 minutes
-        tx.execute(migrations_sql_file)
-
-    with api_tx() as tx:
-        tx.execute(email_domains_bad_file)
-
-    with api_tx() as tx:
-        tx.execute(email_domains_good_file)
-
-    with api_tx() as tx:
-        tx.execute('SET LOCAL statement_timeout = 300000') # 5 minutes
-        tx.execute(banned_club_file)
-
-    migrate_unnormalized_emails()
-
-@post('/request-otp', limiter=shared_otp_limit)
-@validate(t.PostRequestOtp)
-def post_request_otp(req: t.PostRequestOtp) -> object:
-    scope = "request_otp"
-
-    with (
-        limiter.limit(
-            auth_rate_limit,
-            scope=scope,
-            exempt_when=disable_ip_rate_limit),
-        limiter.limit(
-            auth_rate_limit,
-            scope=scope,
-            key_func=limiter_account,
-            exempt_when=disable_account_rate_limit)
-    ):
-        return person.post_request_otp(req)
-
-@apost(
-    '/resend-otp',
-    limiter=shared_otp_limit,
-    expected_onboarding_status=None,
-    expected_sign_in_status=False
-)
-def post_resend_otp(s: t.SessionInfo) -> object:
-    return person.post_resend_otp(s)
-
-@apost(
-    '/check-otp',
-    expected_onboarding_status=None,
-    expected_sign_in_status=False
-)
-@validate(t.PostCheckOtp)
-def post_check_otp(req: t.PostCheckOtp, s: t.SessionInfo) -> object:
-    scope = "check_otp"
-
-    with (
-        limiter.limit(
-            auth_rate_limit,
-            scope=scope,
-            exempt_when=disable_ip_rate_limit),
-        limiter.limit(
-            auth_rate_limit,
-            scope=scope,
-            key_func=limiter_account,
-            exempt_when=disable_account_rate_limit)
-    ):
-        return person.post_check_otp(req, s)
-
-@post('/sign-in-with-google')
-@validate(t.PostSignInWithGoogle)
-def post_sign_in_with_google(req: t.PostSignInWithGoogle) -> object:
-    scope = "social_sign_in"
-
-    with (
-        limiter.limit(
-            auth_rate_limit,
-            scope=scope,
-            exempt_when=disable_ip_rate_limit),
-    ):
-        return person.post_sign_in_with_google(
-            token=req.id_token,
-            pending_club_name=req.pending_club_name,
-        )
-
-@post('/sign-in-with-apple')
-@validate(t.PostSignInWithApple)
-def post_sign_in_with_apple(req: t.PostSignInWithApple) -> object:
-    scope = "social_sign_in"
-
-    with (
-        limiter.limit(
-            auth_rate_limit,
-            scope=scope,
-            exempt_when=disable_ip_rate_limit),
-    ):
-        return person.post_sign_in_with_apple(
-            token=req.identity_token,
-            nonce=req.nonce,
-            pending_club_name=req.pending_club_name,
-        )
-
-# Apple Sign-In web/Android OAuth callback. Must be a `@post` (not
-# `@apost`) — the request comes from Apple's authorize endpoint as an
-# unauthenticated form_post, with no bearer token. See
-# `auth/apple_oauth.py` for the rationale.
+# Apple Sign-In web/Android OAuth callback. This remains unauthenticated:
+# Apple POSTs a form body here, which we convert into a redirect response for
+# the client-controlled return URL. See `auth/apple_oauth.py` for the rationale.
 #
 # This is on its own scope so it doesn't double-bill against
 # `social_sign_in`: a single web/Android Apple sign-in hits this
 # callback *and* /sign-in-with-apple, and we want the per-day budget
 # to be "one sign-in = one slot" not "two slots".
-@post('/auth/apple/callback')
-def post_auth_apple_callback() -> object:
-    scope = "apple_oauth_callback"
+@app.post('/auth/apple/callback')
+async def post_auth_apple_callback(
+    request: Request,
+    _limited: None = Depends(ip_rate_limit(
+        auth_rate_limit,
+        scope='apple_oauth_callback',
+    )),
+) -> object:
+    raw_body = await request.body()
+    form = dict(parse_qsl(
+        raw_body.decode('utf-8', 'ignore'),
+        keep_blank_values=True,
+    ))
+    return apple_oauth.handle_callback(
+        id_token=form.get('id_token') or '',
+        state=form.get('state') or '',
+        error=form.get('error'),
+    )
 
-    with (
-        limiter.limit(
-            auth_rate_limit,
-            scope=scope,
-            exempt_when=disable_ip_rate_limit),
-    ):
-        return apple_oauth.handle_callback(
-            id_token=request.form.get('id_token', ''),
-            state=request.form.get('state', ''),
-            error=request.form.get('error'),
-        )
-
-@apost('/sign-out', expected_onboarding_status=None)
-def post_sign_out(s: t.SessionInfo) -> object:
-    person.post_sign_out(s)
+@app.post('/sign-out')
+async def post_sign_out(
+    s: t.SessionInfo = Depends(session(expected_onboarding_status=None)),
+) -> object:
+    await person.post_sign_out(s)
     return None
 
-@apost('/check-session-token', expected_onboarding_status=None)
-def post_check_session_token(s: t.SessionInfo) -> object:
-    return person.post_check_session_token(s)
+@app.post('/check-session-token')
+async def post_check_session_token(
+    s: t.SessionInfo = Depends(session(expected_onboarding_status=None)),
+) -> object:
+    return await person.post_check_session_token(s)
 
-@aget(
-    '/search-locations',
-    expected_onboarding_status=None,
-    expected_sign_in_status=None,
-)
-def get_search_locations(_: object) -> object:
-    return location.get_search_locations(q=request.args.get('q'))
+@app.get('/search-locations')
+async def get_search_locations(
+    request: Request,
+    s: t.SessionInfo = Depends(session(
+        expected_onboarding_status=None,
+        expected_sign_in_status=None,
+    )),
+) -> object:
+    return await location.get_search_locations(request.query_params.get('q'))
 
-@apatch('/onboardee-info', expected_onboarding_status=False)
-@validate(t.PatchOnboardeeInfo)
-def patch_onboardee_info(req: t.PatchOnboardeeInfo, s: t.SessionInfo) -> object:
-    return person.patch_onboardee_info(req, s)
+@app.patch('/onboardee-info')
+async def patch_onboardee_info(
+    req: t.PatchOnboardeeInfo,
+    s: t.SessionInfo = Depends(session(expected_onboarding_status=False)),
+    _account_limited: None = Depends(account_rate_limit(default_limits)),
+) -> object:
+    return await person.patch_onboardee_info(req, s)
 
-@adelete('/onboardee-info', expected_onboarding_status=False)
-@validate(t.DeleteOnboardeeInfo)
-def delete_onboardee_info(req: t.DeleteOnboardeeInfo, s: t.SessionInfo) -> object:
-    person.delete_onboardee_info(req, s)
-    return None
+@app.post('/finish-onboarding')
+async def post_finish_onboarding(
+    s: t.SessionInfo = Depends(session(expected_onboarding_status=False)),
+) -> object:
+    return await person.post_finish_onboarding(s)
 
-@apost('/finish-onboarding', expected_onboarding_status=False)
-def post_finish_onboarding(s: t.SessionInfo) -> object:
-    return person.post_finish_onboarding(s)
-
-@aget('/next-questions')
-def get_next_questions(s: t.SessionInfo) -> object:
-    return question.get_next_questions(
+@app.get('/next-questions')
+async def get_next_questions(
+    request: Request,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await question.get_next_questions(
         s=s,
-        n=request.args.get('n', '10'),
-        o=request.args.get('o', '0'),
+        n=request.query_params.get('n', '10'),
+        o=request.query_params.get('o', '0'),
     )
 
-@get('/public-next-questions')
-def get_public_next_questions() -> object:
-    return question.get_public_next_questions(
-        n=request.args.get('n', '10'),
-        o=request.args.get('o', '0'),
+@app.get('/public-next-questions')
+async def get_public_next_questions(request: Request) -> object:
+    return await question.get_public_next_questions(
+        n=request.query_params.get('n', '10'),
+        o=request.query_params.get('o', '0'),
     )
 
-@apost('/answer')
-@validate(t.PostAnswer)
-def post_answer(req: t.PostAnswer, s: t.SessionInfo) -> object:
-    return qanda.post_answer(req, s)
+@app.post('/answer')
+async def post_answer(
+    req: t.PostAnswer,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await qanda.post_answer(req, s)
 
-@adelete('/answer')
-@validate(t.DeleteAnswer)
-def delete_answer(req: t.DeleteAnswer, s: t.SessionInfo) -> object:
-    return qanda.delete_answer(req, s)
+@app.delete('/answer')
+async def delete_answer(
+    req: t.DeleteAnswer,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await qanda.delete_answer(req, s)
 
-@aget('/search')
-def get_search(s: t.SessionInfo) -> object:
-    n = request.args.get('n')
-    o = request.args.get('o')
+@app.get('/search')
+async def get_search(
+    request: Request,
+    s: t.SessionInfo = Depends(session())
+) -> object:
+    n = request.query_params.get('n')
+    o = request.query_params.get('o')
 
-    rawClub = request.args.get('club')
+    rawClub = request.query_params.get('club')
     lowerClub = None if rawClub is None else rawClub.lower().strip()
 
     club = (
         search.ClubHttpArg(lowerClub if lowerClub != '\0' else None)
-        if 'club' in request.args
+        if 'club' in request.query_params
         else None
     )
 
     search_type, _ = search.get_search_type(n, o)
 
-    limit = "15 per 2 minutes"
     scope = json.dumps([search_type, lowerClub])
 
     if search_type == 'uncached-search':
-        with (
-            limiter.limit(
-                limit,
-                scope=scope,
-                exempt_when=disable_ip_rate_limit),
-            limiter.limit(
-                limit,
-                scope=scope,
-                key_func=limiter_account,
-                exempt_when=disable_account_rate_limit)
-        ):
-            return search.get_search(s=s, n=n, o=o, club=club)
-    else:
-        return search.get_search(s=s, n=n, o=o, club=club)
+        await check_ip_and_account(request, search_rate_limit, scope=scope)
 
-@get('/public-search')
-def get_public_search() -> object:
-    return search.get_public_search(
-        n=request.args.get('n'),
-        o=request.args.get('o'),
-        answers=request.args.get('answers'),
+    return await search.get_search(s=s, n=n, o=o, club=club)
+
+@app.get('/public-search')
+async def get_public_search(request: Request) -> object:
+    return await search.get_public_search(
+        n=request.query_params.get('n'),
+        o=request.query_params.get('o'),
+        answers=request.query_params.get('answers'),
     )
 
-@get('/health', limiter=limiter.exempt)
-def get_health() -> object:
+@app.get('/health')
+@rate_limit_exempt
+async def get_health() -> object:
     return 'status: ok'
 
-@aget('/me')
-def get_me_by_session(s: t.SessionInfo) -> object:
-    return person.get_me(person_id_as_int=s.person_id)
-
-@get('/me/<person_id>')
-def get_me_by_id(person_id: str) -> object:
-    return person.get_me(person_id_as_str=person_id)
-
-@aget('/prospect-profile/<prospect_handle>', auth='optional')
-def get_prospect_profile(
-    s: Optional[t.SessionInfo],
+@app.get('/prospect-profile/{prospect_handle}')
+async def get_prospect_profile(
     prospect_handle: str,
+    s: t.SessionInfo | None = Depends(session(optional=True)),
 ) -> object:
-    return person.get_prospect_profile(s, prospect_handle)
+    return await person.get_prospect_profile(s, prospect_handle)
 
-@aget('/conversation-prospect/<prospect_uuid>')
-def get_conversation_prospect(s: t.SessionInfo, prospect_uuid: str) -> object:
-    return person.get_conversation_prospect(s, prospect_uuid)
+@app.get('/conversation-prospect/{prospect_uuid}')
+async def get_conversation_prospect(
+    prospect_uuid: str,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.get_conversation_prospect(s, prospect_uuid)
 
-@apost('/skip/by-uuid/<prospect_uuid>')
-@validate(t.PostSkip)
-def post_skip_by_uuid(req: t.PostSkip, s: t.SessionInfo, prospect_uuid: str) -> object:
-    limit = "1 per 5 seconds; 20 per day"
-    scope = "report"
-
+@app.post('/skip/by-uuid/{prospect_uuid}')
+async def post_skip_by_uuid(
+    request: Request,
+    prospect_uuid: str,
+    req: t.PostSkip = Body(default_factory=t.PostSkip),
+    s: t.SessionInfo = Depends(session()),
+) -> object:
     if req.report_reason:
-        with (
-            limiter.limit(
-                limit,
-                scope=scope,
-                exempt_when=disable_ip_rate_limit),
-            limiter.limit(
-                limit,
-                scope=scope,
-                key_func=limiter_account,
-                exempt_when=disable_account_rate_limit)
-        ):
-            return person.post_skip_by_uuid(req, s, prospect_uuid)
-    else:
-        return person.post_skip_by_uuid(req, s, prospect_uuid)
+        await check_ip_and_account(request, report_rate_limit, scope="report")
 
-# TODO: Delete
-@apost('/unskip/<int:prospect_person_id>')
-def post_unskip(s: t.SessionInfo, prospect_person_id: int) -> object:
-    person.post_unskip(s, prospect_person_id)
+    await skip_by_uuid(
+        subject_uuid=string(s.person_uuid, 'person_uuid'),
+        object_uuid=prospect_uuid,
+        reason=req.report_reason or '',
+    )
     return None
 
-@apost('/unskip/by-uuid/<prospect_uuid>')
-def post_unskip_by_uuid(s: t.SessionInfo, prospect_uuid: str) -> object:
-    person.post_unskip_by_uuid(s, prospect_uuid)
-    return None
-
-@aget(
-    '/compare-personalities'
-    '/<int:prospect_person_id>'
-    '/<any(mbti, big5, attachment, politics, other):topic>'
-)
-def get_compare_personalities(
-    s: t.SessionInfo,
-    prospect_person_id: int,
-    topic: str
+@app.post('/unskip/by-uuid/{prospect_uuid}')
+async def post_unskip_by_uuid(
+    prospect_uuid: str,
+    s: t.SessionInfo = Depends(session()),
 ) -> object:
-    return person.get_compare_personalities(s, prospect_person_id, topic)
+    await person.post_unskip_by_uuid(s, prospect_uuid)
+    return None
 
-@aget('/compare-answers/<int:prospect_person_id>')
-def get_compare_answers(s: t.SessionInfo, prospect_person_id: int) -> object:
-    return person.get_compare_answers(
+@app.get('/compare-personalities/{prospect_person_id:int}/{topic}')
+async def get_compare_personalities(
+    prospect_person_id: int,
+    topic: str = FastApiPath(pattern='^(mbti|big5|attachment|politics|other)$'),
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.get_compare_personalities(s, prospect_person_id, topic)
+
+@app.get('/compare-answers/{prospect_person_id:int}')
+async def get_compare_answers(
+    request: Request,
+    prospect_person_id: int,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.get_compare_answers(
         s,
         prospect_person_id,
-        agreement=request.args.get('agreement'),
-        topic=request.args.get('topic'),
-        n=request.args.get('n', '10'),
-        o=request.args.get('o', '0'),
+        agreement=request.query_params.get('agreement'),
+        topic=request.query_params.get('topic'),
+        n=request.query_params.get('n', '10'),
+        o=request.query_params.get('o', '0'),
     )
 
-@apost('/inbox-info')
-@validate(t.PostInboxInfo)
-def post_inbox_info(req: t.PostInboxInfo, s: t.SessionInfo) -> object:
-    return person.post_inbox_info(req, s)
+@app.post('/inbox-info')
+async def post_inbox_info(
+    req: t.PostInboxInfo,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.post_inbox_info(req, s)
 
-@adelete('/account')
-def delete_account(s: t.SessionInfo) -> object:
-    return person.delete_or_ban_account(s=s)
+@app.delete('/account')
+async def delete_account(
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.delete_or_ban_account(s=s)
 
-@apost('/deactivate')
-def post_deactivate(s: t.SessionInfo) -> object:
-    person.post_deactivate(s=s)
+@app.post('/deactivate')
+async def post_deactivate(
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    await person.post_deactivate(s=s)
     return None
 
-@aget('/profile-info')
-def get_profile_info(s: t.SessionInfo) -> object:
-    return person.get_profile_info(s)
+@app.get('/profile-info')
+async def get_profile_info(
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.get_profile_info(s)
 
-@adelete('/profile-info')
-@validate(t.DeleteProfileInfo)
-def delete_profile_info(req: t.DeleteProfileInfo, s: t.SessionInfo) -> object:
-    person.delete_profile_info(req, s)
+@app.delete('/profile-info')
+async def delete_profile_info(
+    req: t.DeleteProfileInfo,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    await person.delete_profile_info(req, s)
     return None
 
-@apatch('/profile-info')
-@validate(t.PatchProfileInfo)
-def patch_profile_info(req: t.PatchProfileInfo, s: t.SessionInfo) -> object:
-    return person.patch_profile_info(req, s)
+@app.patch('/profile-info')
+async def patch_profile_info(
+    req: t.PatchProfileInfo,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.patch_profile_info(req, s)
 
-@aget('/search-filters')
-def get_search_filers(s: t.SessionInfo) -> object:
-    return person.get_search_filters(s)
+@app.get('/search-filters')
+async def get_search_filters(
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.get_search_filters(s)
 
-@apost('/search-filter')
-@validate(t.PostSearchFilter)
-def post_search_filter(req: t.PostSearchFilter, s: t.SessionInfo) -> object:
-    return person.post_search_filter(req, s)
+@app.post('/search-filter')
+async def post_search_filter(
+    req: t.PostSearchFilter,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.post_search_filter(req, s)
 
-@aget('/search-filter-questions')
-def get_search_filter_questions(s: t.SessionInfo) -> object:
-    return question.get_search_filter_questions(
+@app.get('/search-filter-questions')
+async def get_search_filter_questions(
+    request: Request,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await question.get_search_filter_questions(
         s=s,
-        q=request.args.get('q', ''),
-        n=request.args.get('n', '10'),
-        o=request.args.get('o', '0'),
+        q=request.query_params.get('q', ''),
+        n=request.query_params.get('n', '10'),
+        o=request.query_params.get('o', '0'),
     )
 
-@apost('/search-filter-answer')
-@validate(t.PostSearchFilterAnswer)
-def post_search_filter_answer(req: t.PostSearchFilterAnswer, s: t.SessionInfo) -> object:
-    return person.post_search_filter_answer(req, s)
+@app.post('/search-filter-answer')
+async def post_search_filter_answer(
+    req: t.PostSearchFilterAnswer,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.post_search_filter_answer(req, s)
 
-@aget('/search-clubs')
-def get_search_clubs(s: t.SessionInfo) -> object:
-    return person.get_search_clubs(s=s, search_str=request.args.get('q', ''))
+@app.get('/search-clubs')
+async def get_search_clubs(
+    request: Request,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.get_search_clubs(
+        s=s,
+        search_str=request.query_params.get('q', ''),
+    )
 
-@get('/search-public-clubs')
-def get_search_public_clubs() -> object:
-    return person.get_search_clubs(
-            s=None, search_str=request.args.get('q', ''), allow_empty=True)
+@app.get('/search-public-clubs')
+async def get_search_public_clubs(request: Request) -> object:
+    return await person.get_search_clubs(
+        s=None,
+        search_str=request.query_params.get('q', ''),
+        allow_empty=True,
+    )
 
-@get('/club/<clubname:name>', merge_slashes=False)
-def get_club(name: str) -> object:
-    result = person.get_club(
+@app.get('/club/{name:path}')
+async def get_club(name: str) -> object:
+    result = await person.get_club(
         name=name,
         ttl_hash=get_ttl_hash(seconds=300))
     if result is None:
         return '', 404
     return result
 
-@apost('/join-club')
-@validate(t.PostJoinClub)
-def post_join_club(req: t.PostJoinClub, s: t.SessionInfo) -> object:
-    return person.post_join_club(req, s)
+@app.post('/join-club')
+async def post_join_club(
+    req: t.PostJoinClub,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.post_join_club(req, s)
 
-@apost('/leave-club')
-@validate(t.PostLeaveClub)
-def post_leave_club(req: t.PostLeaveClub, s: t.SessionInfo) -> object:
-    person.post_leave_club(req, s)
+@app.post('/leave-club')
+async def post_leave_club(
+    req: t.PostLeaveClub,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    await person.post_leave_club(req, s)
     return None
 
-@get('/update-notifications')
-def get_update_notifications() -> object:
-    return person.get_update_notifications(
-        email=request.args.get('email', ''),
-        type=request.args.get('type', ''),
-        frequency=request.args.get('frequency', ''),
+@app.get('/update-notifications')
+async def get_update_notifications(request: Request) -> object:
+    return await person.get_update_notifications(
+        email=request.query_params.get('email', ''),
+        type=request.query_params.get('type', ''),
+        frequency=request.query_params.get('frequency', ''),
     )
 
-@aget('/feed')
-def get_feed(s: t.SessionInfo) -> object:
+@app.get('/feed')
+async def get_feed(
+    request: Request,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
     valid_datetime = t.ValidDatetime.model_validate(
-        {'datetime': request.args.get('before')}
+        {'datetime': request.query_params.get('before')}
     )
 
-    return search.get_feed(s=s, before=valid_datetime.datetime)
+    return await search.get_feed(s=s, before=valid_datetime.datetime)
 
-@apost('/verification-selfie')
-@validate(t.PostVerificationSelfie)
-def post_verification_selfie(req: t.PostVerificationSelfie, s: t.SessionInfo) -> object:
-    return person.post_verification_selfie(req, s)
+@app.post('/verification-selfie')
+async def post_verification_selfie(
+    req: t.PostVerificationSelfie,
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.post_verification_selfie(req, s)
 
-@apost('/verify')
-def post_verify(s: t.SessionInfo) -> object:
-    limit = "8 per day"
-    scope = "verify"
-
-    with (
-        limiter.limit(
-            limit,
-            scope=scope,
-            exempt_when=disable_ip_rate_limit),
-        limiter.limit(
-            limit,
-            scope=scope,
-            key_func=limiter_account,
-            exempt_when=disable_account_rate_limit)
-    ):
-        person.post_verify(s)
-        return None
-
-@aget('/check-verification')
-def get_check_verification(s: t.SessionInfo) -> object:
-    return person.get_check_verification(s=s)
-
-@apost('/dismiss-donation')
-def post_dismiss_donation(s: t.SessionInfo) -> object:
-    person.post_dismiss_donation(s=s)
+@app.post('/verify')
+async def post_verify(
+    s: t.SessionInfo = Depends(session()),
+    _limited: None = Depends(ip_and_account_rate_limit(
+        verify_rate_limit,
+        scope="verify",
+    )),
+) -> object:
+    await person.post_verify(s)
     return None
 
-@get('/stats')
-def get_stats() -> object:
-    return person.get_stats(
+@app.get('/check-verification')
+async def get_check_verification(
+    s: t.SessionInfo = Depends(session()),
+) -> object:
+    return await person.get_check_verification(s)
+
+@app.get('/stats')
+async def get_stats(request: Request) -> object:
+    return await person.get_stats(
         ttl_hash=get_ttl_hash(seconds=60),
-        club_name=request.args.get('club-name'))
+        club_name=request.query_params.get('club-name'))
 
-@get('/gender-stats')
-def get_gender_stats() -> object:
-    return person.get_gender_stats(ttl_hash=get_ttl_hash(seconds=60))
+@app.get('/gender-stats')
+async def get_gender_stats(request: Request) -> object:
+    return await person.get_gender_stats(ttl_hash=get_ttl_hash(seconds=60))
 
-@get('/admin/ban-link/<token>')
-def get_admin_ban_link(token: str) -> object:
-    return person.get_admin_ban_link(token)
+@app.get('/admin/ban-link/{token}')
+async def get_admin_ban_link(
+    token: str,
+) -> object:
+    return await person.get_admin_ban_link(token)
 
-@get('/admin/ban/<token>')
-def get_admin_ban(token: str) -> object:
-    return person.get_admin_ban(token)
+@app.get('/admin/ban/{token}')
+async def get_admin_ban(
+    token: str,
+) -> object:
+    return await person.get_admin_ban(token)
 
-@get('/admin/delete-photo-link/<token>')
-def get_admin_delete_photo_link(token: str) -> object:
-    return person.get_admin_delete_photo_link(token)
+@app.get('/admin/delete-photo-link/{token}')
+async def get_admin_delete_photo_link(
+    token: str,
+) -> object:
+    return await person.get_admin_delete_photo_link(token)
 
-@get('/admin/delete-photo/<token>')
-def get_admin_delete_photo(token: str) -> object:
-    return person.get_admin_delete_photo(token)
+@app.get('/admin/delete-photo/{token}')
+async def get_admin_delete_photo(
+    token: str,
+) -> object:
+    return await person.get_admin_delete_photo(token)
 
-@aget('/export-data-token')
-def get_export_data_token(s: t.SessionInfo) -> object:
-    limit = "3 per day"
-    scope = "export_data_token"
+@app.get('/export-data-token')
+async def get_export_data_token(
+    s: t.SessionInfo = Depends(session()),
+    _limited: None = Depends(ip_and_account_rate_limit(
+        export_data_rate_limit,
+        scope="export_data_token",
+    )),
+) -> object:
+    return await person.get_export_data_token(s=s)
 
-    with (
-        limiter.limit(
-            limit,
-            scope=scope,
-            exempt_when=disable_ip_rate_limit),
-        limiter.limit(
-            limit,
-            scope=scope,
-            key_func=limiter_account,
-            exempt_when=disable_account_rate_limit)
-    ):
-        return person.get_export_data_token(s=s)
+@app.get('/export-data/{token}')
+async def get_export_data(token: str) -> object:
+    return await person.get_export_data(token=token)
 
-@get('/export-data/<token>')
-def get_export_data(token: str) -> object:
-    return person.get_export_data(token=token)
+@app.post('/revenuecat')
+async def post_revenuecat(request: Request, req: t.PostRevenuecat) -> object:
+    return await person.post_revenuecat(
+        req, request.headers.get('Authorization', ''))
 
-@post('/revenuecat')
-@validate(t.PostRevenuecat)
-def post_revenuecat(req: t.PostRevenuecat) -> object:
-    return person.post_revenuecat(req)
-
-# DEPRECATED: visitors are now delivered over the chat WebSocket -- a snapshot on
-# connect (the `duo_query_visitors` stanza) plus live `duo_visitor` pushes from the
-# profile-view write path. This endpoint is kept only so older clients, which still
-# poll it, keep working. Remove once those clients age out.
-@aget('/visitors')
-def get_visitors(s: t.SessionInfo) -> object:
-    return person.get_visitors(s=s)
-
-# DEPRECATED: superseded by the `duo_mark_visitors_checked` chat stanza. Kept for
-# older clients that still POST here.
-@apost('/mark-visitors-checked')
-@validate(t.PostMarkVisitorsChecked)
-def post_mark_visitors_checked(req: t.PostMarkVisitorsChecked, s: t.SessionInfo) -> object:
-    person.post_mark_visitors_checked(req=req, s=s)
-    return None
+@app.websocket('/chat')
+async def websocket_chat(websocket: WebSocket) -> None:
+    return await process_websocket_messages(websocket)
