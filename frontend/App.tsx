@@ -58,6 +58,7 @@ import { TooltipListener } from './components/tooltip';
 import { VerificationCameraModal } from './components/verification-camera';
 import { notify } from './events/events';
 import { PointOfSaleModal } from './components/modal/point-of-sale-modal';
+import { DateOfBirthConfirmationModal } from './components/modal/date-of-birth-confirmation-modal';
 import { SignUpModal, showSignUp } from './components/modal/sign-up-modal';
 import { SignUpBanner } from './components/sign-up-banner';
 import { hasPendingAppleWebSignIn } from './api/social-auth';
@@ -526,6 +527,7 @@ const App = () => {
             <PointOfSaleModal/>
             <SignUpModal/>
             <VerificationCameraModal/>
+            <DateOfBirthConfirmationModal/>
             </KeyboardProvider>
           </GestureHandlerRootView>
         }
