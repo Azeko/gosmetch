@@ -21,6 +21,8 @@ from service.chat.spam import is_spam_message
 from service.chat.upsertlastnotification import upsert_last_notification
 from service.chat.messagestorage.inbox import (
     get_inbox,
+    get_inbox_entry,
+    get_inbox_snapshot,
     mark_displayed,
 )
 from service.chat.messagestorage.mam import (
@@ -54,6 +56,7 @@ from service.chat.chatutil import (
     format_timestamp,
     now_microseconds,
     fetch_id_from_username,
+    redis_has_subscribers,
 )
 from chatprotocol.message import (
     AudioMessage,
@@ -64,6 +67,7 @@ from chatprotocol.message import (
 )
 from chatprotocol import (
     InboxQuery,
+    InboxSnapshotQuery,
     MamQuery,
     MarkDisplayed,
     MarkVisitorsChecked,
@@ -553,6 +557,11 @@ async def process_text(
                 connection_uuid,
                 await get_inbox(parsed.query_id, from_username))
 
+    if isinstance(parsed, InboxSnapshotQuery):
+        return await redis_publish_many(
+                connection_uuid,
+                await get_inbox_snapshot(from_username))
+
     if isinstance(parsed, VisitorsQuery):
         return await redis_publish_many(
                 connection_uuid,
@@ -752,6 +761,24 @@ async def process_text(
         # Don't deliver to the recipient when the sender is shadow-banned; the
         # sender still gets their delivery receipt below.
         if not is_shadow_banned:
+            # The complete inbox entry goes out before the message itself so
+            # that by the time the recipient's client reacts to the message,
+            # its inbox already has the sender's info (which legacy clients
+            # fetched from `/inbox-info` instead). This runs after the message
+            # is stored, so the entry reflects the new message.
+            #
+            # Fetching the entry is skipped when nobody is subscribed to the
+            # recipient's channel: the publish would go nowhere, and an
+            # offline recipient gets the whole inbox via `duo_query_inbox` on
+            # reconnect anyway. That reconnect snapshot also covers the race
+            # where a recipient connects between this check and the publish.
+            if await redis_has_subscribers(REDIS_WORKER_CLIENT, to_username):
+                await redis_publish_many(
+                        to_username,
+                        await get_inbox_entry(
+                            viewer_username=to_username,
+                            prospect_username=from_username))
+
             await redis_publish_many(to_username, [delivery_message])
 
         await redis_publish_many(connection_uuid, [response])

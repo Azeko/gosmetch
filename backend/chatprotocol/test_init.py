@@ -12,6 +12,7 @@ from chatprotocol.message import (
 from chatprotocol import outbound
 from chatprotocol.inbound import (
     InboxQuery,
+    InboxSnapshotQuery,
     IqBind,
     IqSession,
     MamQuery,
@@ -30,8 +31,12 @@ from chatprotocol.outbound import (
     AuthFailure,
     AuthSuccess,
     BindResult,
+    InboxConversation,
+    InboxEntry,
     InboxFin,
     InboxResult,
+    InboxSnapshot,
+    InboxSnapshotPayload,
     IncomingChat,
     IncomingReaction,
     IncomingTyping,
@@ -77,6 +82,23 @@ _VISITORS_PAYLOAD_JSON = json.dumps({
     'you_visited': [],
     'last_visited_at': None,
 })
+_INBOX_CONVERSATION: InboxConversation = {
+    'person_uuid': U2,
+    'url_slug': 'some-slug',
+    'name': 'Alé & <co>',
+    'match_percentage': 50,
+    'image_uuid': None,
+    'image_blurhash': None,
+    'is_verified': False,
+    'is_available': True,
+    'location': 'intros',
+    'last_message': 'hi',
+    'last_message_read': False,
+    'last_message_timestamp': '2020-01-01T00:00:00.000000Z',
+}
+_INBOX_PAYLOAD: InboxSnapshotPayload = {
+    'conversations': [_INBOX_CONVERSATION],
+}
 
 # One representative instance of every outbound stanza.
 OUTBOUND_SAMPLES = [
@@ -139,6 +161,8 @@ OUTBOUND_SAMPLES = [
         inner_to_username=U1, body='hi', stamp='2020-01-01T00:00:00.000000Z',
         unread_count=2, box='inbox', query_id='q1', muted_until=0),
     InboxFin(query_id='q1'),
+    InboxSnapshot(payload=_INBOX_PAYLOAD),
+    InboxEntry(payload=_INBOX_CONVERSATION),
     StreamOpenResponse(version='1.0', id='oid', from_=LSERVER),
     StreamFeatures(authenticated=False),
     StreamFeatures(authenticated=True),
@@ -314,6 +338,10 @@ class TestInboundParsing(unittest.TestCase):
         self.assertEqual(
             parse_incoming('{"duo_mark_visitors_checked": null}'),
             MarkVisitorsChecked(when=None))
+
+    def test_inbox_snapshot_query(self) -> None:
+        self.assertEqual(
+            parse_incoming('{"duo_query_inbox": null}'), InboxSnapshotQuery())
 
     def test_inbox_query(self) -> None:
         js = (

@@ -1,13 +1,18 @@
+import traceback
+
 from batcher import Batcher
-from database import Tx, api_tx
+from database import Row, Tx, api_tx
 from dataclasses import dataclass
 from service.chat.chatutil import (
     LSERVER,
     format_timestamp,
 )
 from chatprotocol.outbound import (
+    InboxConversation,
+    InboxEntry,
     InboxFin,
     InboxResult,
+    InboxSnapshot,
     Outbound,
 )
 
@@ -21,6 +26,188 @@ WHERE
 ORDER BY
     timestamp
 """
+
+
+# The gating rules (which fields a viewer may see, and which box the
+# conversation belongs in) mirror Q_INBOX_INFO, which serves the legacy
+# `/inbox-info` endpoint. This query joins them against the viewer's `inbox`
+# rows so one websocket response carries complete conversations.
+#
+# `entry_predicate` narrows the viewer's `inbox` rows: empty for the whole-inbox
+# snapshot, or an equality on `remote_bare_jid` (the primary key's second
+# column) for a single conversation. The predicate is kept a plain equality --
+# rather than an `%(x)s IS NULL OR ...` that serves both -- so the single-entry
+# query gets an index scan on `inbox_pkey` even under a generic plan, which a
+# parameterised `IS NULL` branch would defeat.
+def _q_inbox_snapshot(entry_predicate: str) -> str:
+    return f"""
+WITH viewer AS (
+    SELECT
+        id,
+        personality
+    FROM
+        person
+    WHERE
+        uuid = %(username)s::uuid
+), entry AS (
+    SELECT
+        uuid_or_null(split_part(remote_bare_jid, '@', 1)) AS prospect_uuid,
+        body,
+        COALESCE(unread_count, 0) AS unread_count,
+        timestamp
+    FROM
+        inbox
+    WHERE
+        luser = %(username)s::text
+    {entry_predicate}
+), conversation AS (
+    SELECT
+        entry.prospect_uuid,
+        entry.body,
+        entry.unread_count,
+        entry.timestamp,
+        prospect.url_slug AS url_slug,
+        prospect.name AS name,
+        COALESCE(prospect.verification_level_id > 1, FALSE) AS verified,
+        photo.uuid AS image_uuid,
+        photo.blurhash AS image_blurhash,
+        CLAMP(
+            0,
+            99,
+            100 * (1 - (viewer.personality <#> prospect.personality)) / 2
+        )::SMALLINT AS match_percentage,
+        prospect.id IS NULL AS is_prospect_deleted,
+        COALESCE(
+            prospect.activated AND prospect.shadow_banned_at IS NULL, FALSE
+        ) AS is_prospect_activated,
+        EXISTS (
+            SELECT
+                1
+            FROM
+                messaged
+            WHERE
+                subject_person_id = viewer.id
+            AND
+                object_person_id = prospect.id
+        ) AS person_messaged_prospect,
+        EXISTS (
+            SELECT
+                1
+            FROM
+                messaged
+            WHERE
+                subject_person_id = prospect.id
+            AND
+                object_person_id = viewer.id
+        ) AS prospect_messaged_person,
+        EXISTS (
+            SELECT
+                1
+            FROM
+                skipped
+            WHERE
+                subject_person_id = viewer.id
+            AND
+                object_person_id = prospect.id
+        ) AS person_skipped_prospect,
+        EXISTS (
+            SELECT
+                1
+            FROM
+                skipped
+            WHERE
+                subject_person_id = prospect.id
+            AND
+                object_person_id = viewer.id
+        ) AS prospect_skipped_person
+    FROM
+        entry
+    LEFT JOIN
+        person AS prospect
+    ON
+        prospect.uuid = entry.prospect_uuid
+    LEFT JOIN
+        viewer
+    ON
+        TRUE
+    LEFT JOIN LATERAL (
+        SELECT
+            uuid,
+            blurhash
+        FROM
+            photo
+        WHERE
+            person_id = prospect.id
+        ORDER BY
+            position
+        LIMIT 1
+    ) AS photo
+    ON
+        TRUE
+), gated AS (
+    SELECT
+        conversation.*,
+        is_prospect_activated AND NOT prospect_skipped_person AS is_available,
+        CASE
+            WHEN
+                    NOT is_prospect_deleted
+                AND
+                    NOT prospect_messaged_person
+            THEN 'nowhere'
+            WHEN
+                    is_prospect_activated
+                AND
+                    NOT prospect_skipped_person
+                AND
+                    NOT person_skipped_prospect
+                AND
+                    prospect_messaged_person
+                AND
+                    person_messaged_prospect
+            THEN 'chats'
+            WHEN
+                    is_prospect_activated
+                AND
+                    NOT prospect_skipped_person
+                AND
+                    NOT person_skipped_prospect
+                AND
+                    prospect_messaged_person
+                AND
+                    NOT person_messaged_prospect
+            THEN 'intros'
+            ELSE 'archive'
+        END AS location
+    FROM
+        conversation
+)
+SELECT
+    prospect_uuid::TEXT AS person_uuid,
+    url_slug,
+    CASE WHEN is_available THEN name END AS name,
+    CASE WHEN is_available THEN match_percentage END AS match_percentage,
+    CASE WHEN is_available THEN image_uuid END AS image_uuid,
+    CASE WHEN is_available THEN image_blurhash END AS image_blurhash,
+    is_available AND verified AS is_verified,
+    is_available,
+    location,
+    body AS last_message,
+    unread_count = 0 AS last_message_read,
+    timestamp AS last_message_timestamp
+FROM
+    gated
+WHERE
+    location <> 'nowhere'
+ORDER BY
+    timestamp
+"""
+
+
+# The whole inbox: no extra `entry` predicate beyond the viewer's `luser`.
+Q_INBOX_SNAPSHOT = _q_inbox_snapshot('')
+
+# A single conversation: a plain primary-key equality on `remote_bare_jid`.
+Q_INBOX_ENTRY = _q_inbox_snapshot('AND remote_bare_jid = %(remote_bare_jid)s')
 
 
 Q_UPSERT_CONVERSATION = f"""
@@ -170,6 +357,94 @@ async def get_inbox(query_id: str, username: str) -> list[Outbound]:
     messages.append(InboxFin(query_id=query_id))
 
     return messages
+
+
+# The wire shape itself is defined beside the stanzas that carry it
+# (`chatprotocol.outbound.InboxConversation`); `Q_INBOX_SNAPSHOT`/
+# `Q_INBOX_ENTRY` return the underlying columns and the query gates the
+# viewer-visible fields, but the payload is assembled here.
+def _conversation_from_row(row: Row) -> InboxConversation:
+    return InboxConversation(
+        person_uuid=row['person_uuid'],
+        url_slug=row['url_slug'],
+        name=row['name'],
+        match_percentage=row['match_percentage'],
+        image_uuid=row['image_uuid'],
+        image_blurhash=row['image_blurhash'],
+        is_verified=row['is_verified'],
+        is_available=row['is_available'],
+        location=row['location'],
+        last_message=row['last_message'],
+        last_message_read=row['last_message_read'],
+        # The query returns raw microseconds; formatting here (rather than via
+        # `to_char` in SQL) keeps the per-row timestamp work off the shared DB.
+        last_message_timestamp=format_timestamp(row['last_message_timestamp']),
+    )
+
+
+async def _fetch_inbox_conversations(
+    username: str,
+    prospect_username: str | None = None,
+) -> list[InboxConversation]:
+    if prospect_username is None:
+        query = Q_INBOX_SNAPSHOT
+        params = dict(username=username)
+    else:
+        query = Q_INBOX_ENTRY
+        params = dict(
+            username=username,
+            remote_bare_jid=f'{prospect_username}@{LSERVER}',
+        )
+
+    async with api_tx('read committed') as tx:
+        # The whole-inbox query's estimated cost crosses the default jit
+        # thresholds for users with large inboxes, so JIT spends ~1s compiling
+        # for no benefit. (Same rationale as the legacy Q_INBOX_INFO.)
+        await tx.execute('SET LOCAL jit = off')
+        await tx.execute('SET LOCAL statement_timeout = 15000')
+        await tx.execute(query, params)
+        rows = await tx.fetchall()
+
+    return [_conversation_from_row(row) for row in rows]
+
+
+async def get_inbox_snapshot(username: str) -> list[Outbound]:
+    """
+    The user's whole inbox, each conversation complete with person info, as a
+    single `InboxSnapshot`.
+    """
+    try:
+        conversations = await _fetch_inbox_conversations(username)
+
+        return [InboxSnapshot(payload={'conversations': conversations})]
+    except Exception:
+        print(traceback.format_exc())
+        return []
+
+
+async def get_inbox_entry(
+    viewer_username: str,
+    prospect_username: str,
+) -> list[Outbound]:
+    """
+    The viewer's conversation with one prospect, in the same shape as an
+    `InboxSnapshot` entry, for pushing alongside a delivered message. Empty
+    when the viewer has no inbox row for the prospect (or on failure), so
+    callers can publish the result unconditionally.
+    """
+    try:
+        conversations = await _fetch_inbox_conversations(
+            viewer_username,
+            prospect_username,
+        )
+
+        if not conversations:
+            return []
+
+        return [InboxEntry(payload=conversations[0])]
+    except Exception:
+        print(traceback.format_exc())
+        return []
 
 
 async def process_upsert_conversation_batch(tx: Tx, batch: list[UpsertConversationJob]) -> None:
