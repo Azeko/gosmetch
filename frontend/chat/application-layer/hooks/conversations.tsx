@@ -5,6 +5,19 @@ import { listen } from '../../../events/events';
 import * as _ from 'lodash';
 
 
+const MIN_INTROS_TO_APPLY_SEARCH_FILTERS = 10;
+
+// Intros sections smaller than the minimum aren't worth triaging, so applying
+// search filters only reorders (and divides) sections at least that big.
+const shouldApplySearchFilters = (
+  conversations: Conversation[],
+  section: 'intros' | 'chats' | 'archive',
+  applySearchFilters: boolean,
+): boolean =>
+  section === 'intros' &&
+  applySearchFilters &&
+  conversations.length >= MIN_INTROS_TO_APPLY_SEARCH_FILTERS;
+
 const getSection = (sectionIndex: number, showArchive: boolean) => {
   if (showArchive) {
     return 'archive';
@@ -53,8 +66,19 @@ const sortConversations = (
   conversations: Conversation[],
   section: 'intros' | 'chats' | 'archive',
   sortBy: 'latest' | 'match',
+  applySearchFilters: boolean,
 ): Conversation[] => {
   if (conversations.length === 0) return conversations;
+
+  const applySearchFilters_ =
+    shouldApplySearchFilters(conversations, section, applySearchFilters);
+
+  // When the user applies their search filters to intros, intros from outside
+  // the filters sink below the rest, keeping their relative order otherwise.
+  const filterRank = (c: Conversation) =>
+    applySearchFilters_ && !c.matchesSearchFilters
+      ? 0
+      : 1;
 
   return [...conversations].sort((a, b) => {
     if (section === 'archive') {
@@ -65,59 +89,101 @@ const sortConversations = (
       ]);
     } else if (section === 'intros' && sortBy === 'match') {
       return compareArrays(
-        [b.matchPercentage, +b.lastMessageTimestamp],
-        [a.matchPercentage, +a.lastMessageTimestamp],
+        [filterRank(b), b.matchPercentage, +b.lastMessageTimestamp],
+        [filterRank(a), a.matchPercentage, +a.lastMessageTimestamp],
       );
     } else {
       return compareArrays(
-        [+b.lastMessageTimestamp, b.matchPercentage],
-        [+a.lastMessageTimestamp, a.matchPercentage],
+        [filterRank(b), +b.lastMessageTimestamp, b.matchPercentage],
+        [filterRank(a), +a.lastMessageTimestamp, a.matchPercentage],
       );
     }
   });
 };
 
+type ConversationIds = {
+  ids: string[]
+  numIntrosWithinFilters: number | null
+};
+
 const computeConversationIds = (
   inbox: Inbox | null,
   section: 'intros' | 'chats' | 'archive',
-  sortBy: 'latest' | 'match'
-): string[] | null => {
+  sortBy: 'latest' | 'match',
+  applySearchFilters: boolean,
+): ConversationIds | null => {
   if (inbox === null) {
     return null;
   }
 
   const conversations = getSectionConversations(inbox, section);
-  const sorted = sortConversations(conversations, section, sortBy);
-  return sorted.map((c) => c.personUuid);
+  const sorted = sortConversations(
+    conversations, section, sortBy, applySearchFilters);
+
+  // The sort sank every intro from outside the filters below those within
+  // them, so the count of intros within is also the boundary's index.
+  const numIntrosWithinFilters =
+    shouldApplySearchFilters(sorted, section, applySearchFilters)
+      ? sorted.filter((c) => c.matchesSearchFilters).length
+      : null;
+
+  return {
+    ids: sorted.map((c) => c.personUuid),
+    numIntrosWithinFilters,
+  };
+};
+
+type ConversationsState = {
+  conversations: string[] | null
+  numIntrosWithinFilters: number | null
+  sectionIndex: number
+  sortByIndex: number
+  showArchive: boolean
+  applySearchFilters: boolean
+};
+
+// The settings with the conversation list (and its search-filter boundary)
+// re-derived from the given inbox. Every state transition goes through here
+// so the derived fields always describe the settings they sit beside.
+const withComputedConversations = (
+  state: ConversationsState,
+  inbox: Inbox | null,
+): ConversationsState => {
+  const section = getSection(state.sectionIndex, state.showArchive);
+  const sortBy = getSortBy(state.sortByIndex);
+
+  const computed = computeConversationIds(
+    inbox, section, sortBy, state.applySearchFilters);
+
+  return {
+    ...state,
+    conversations: computed === null ? null : computed.ids,
+    numIntrosWithinFilters:
+      computed === null ? null : computed.numIntrosWithinFilters,
+  };
 };
 
 const useConversations = () => {
-  const [state, setState] = useState<{
-    conversations: string[] | null,
-    sectionIndex: number,
-    sortByIndex: number,
-    showArchive: boolean,
-  }>({
+  const [state, setState] = useState<ConversationsState>({
     conversations: null,
+    numIntrosWithinFilters: null,
     sectionIndex: 0,
     sortByIndex: 0,
     showArchive: false,
+    applySearchFilters: false,
   });
 
   // Subscribe to inbox updates and update only when the derived list changes.
   useEffect(() => {
     const onUpdate = (newInbox?: Inbox | null) => {
       setState((oldState) => {
-        const { sectionIndex, sortByIndex, showArchive } = oldState;
+        const newState = withComputedConversations(oldState, newInbox ?? null);
 
-        const section = getSection(sectionIndex, showArchive);
-        const sortBy = getSortBy(sortByIndex);
+        const unchanged =
+          _.isEqual(oldState.conversations, newState.conversations) &&
+          oldState.numIntrosWithinFilters === newState.numIntrosWithinFilters;
 
-        const newIds = computeConversationIds(newInbox ?? null, section, sortBy);
-
-        return _.isEqual(oldState.conversations, newIds)
-          ? oldState
-          : { ...oldState, conversations: newIds }
+        return unchanged ? oldState : newState;
       });
     };
 
@@ -125,58 +191,37 @@ const useConversations = () => {
   }, []);
 
   const setSectionIndex = useCallback((sectionIndex: number) => {
-    setState((oldState) => {
-      if (oldState.sectionIndex === sectionIndex) {
-        return oldState;
-      }
-
-      const { sortByIndex, showArchive } = oldState;
-
-      const section = getSection(sectionIndex, showArchive);
-      const sortBy = getSortBy(sortByIndex);
-
-      const inbox = getInbox();
-      const conversations = computeConversationIds(inbox, section, sortBy);
-
-      return { ...oldState, conversations, sectionIndex };
-    });
+    setState((oldState) =>
+      oldState.sectionIndex === sectionIndex
+        ? oldState
+        : withComputedConversations({ ...oldState, sectionIndex }, getInbox())
+    );
   }, []);
 
   const setSortByIndex = useCallback((sortByIndex: number) => {
-    setState((oldState) => {
-      if (oldState.sortByIndex === sortByIndex) {
-        return oldState;
-      }
+    setState((oldState) =>
+      oldState.sortByIndex === sortByIndex
+        ? oldState
+        : withComputedConversations({ ...oldState, sortByIndex }, getInbox())
+    );
+  }, []);
 
-      const { sectionIndex, showArchive } = oldState;
-
-      const section = getSection(sectionIndex, showArchive);
-      const sortBy = getSortBy(sortByIndex);
-
-      const inbox = getInbox();
-      const conversations = computeConversationIds(inbox, section, sortBy);
-
-      return { ...oldState, conversations, sortByIndex };
-    });
+  const setApplySearchFilters = useCallback((applySearchFilters: boolean) => {
+    setState((oldState) =>
+      oldState.applySearchFilters === applySearchFilters
+        ? oldState
+        : withComputedConversations(
+            { ...oldState, applySearchFilters }, getInbox())
+    );
   }, []);
 
   const setShowArchive = useCallback((f: (showArchive: boolean) => boolean) => {
     setState((oldState) => {
       const showArchive = f(oldState.showArchive);
 
-      if (oldState.showArchive === showArchive) {
-        return oldState;
-      }
-
-      const { sectionIndex, sortByIndex } = oldState;
-
-      const section = getSection(sectionIndex, showArchive);
-      const sortBy = getSortBy(sortByIndex);
-
-      const inbox = getInbox();
-      const conversations = computeConversationIds(inbox, section, sortBy);
-
-      return { ...oldState, conversations, showArchive };
+      return oldState.showArchive === showArchive
+        ? oldState
+        : withComputedConversations({ ...oldState, showArchive }, getInbox());
     });
   }, []);
 
@@ -184,8 +229,14 @@ const useConversations = () => {
     ...state,
     setSectionIndex,
     setSortByIndex,
+    setApplySearchFilters,
     setShowArchive,
   }
 };
 
-export { useConversations };
+export {
+  MIN_INTROS_TO_APPLY_SEARCH_FILTERS,
+  computeConversationIds,
+  sortConversations,
+  useConversations,
+};

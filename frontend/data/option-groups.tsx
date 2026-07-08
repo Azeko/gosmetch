@@ -42,6 +42,7 @@ import {
   setSearchFilters,
 } from '../events/search-filters';
 import { markSearchResultsStale } from '../events/stale-search-results';
+import { markInboxStale } from '../events/stale-inbox';
 import { markFeedStale } from '../events/stale-feed';
 import { DefaultText } from '../components/default-text';
 import {
@@ -78,6 +79,7 @@ const maxOutDistanceFilter = () => {
   searchQueue.addTask(go);
   patchSearchFilters({ furthest_distance: null });
   markSearchResultsStale();
+  markInboxStale();
 };
 
 const getKnownOrFetchedSearchFilters = async (): Promise<SearchFilters | undefined> => {
@@ -670,6 +672,7 @@ const locationOptionGroup: OptionGroup<OptionGroupLocationSelector> = {
         if (ok) {
           patchProfileInfo({ location });
           markSearchResultsStale();
+          markInboxStale();
         }
         return ok;
       },

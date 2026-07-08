@@ -147,6 +147,7 @@ type Conversation = {
   isAvailableUser: boolean
   isVerified: boolean
   location: 'chats' | 'intros' | 'archive' | 'nowhere'
+  matchesSearchFilters: boolean
 };
 
 type ConversationsMap = { [key: string]: Conversation };
@@ -251,6 +252,7 @@ const conversationFromWire = (
     isAvailableUser: !!c.is_available,
     isVerified: !!c.is_verified,
     location: locations.includes(c.location) ? c.location : 'archive',
+    matchesSearchFilters: !!(c.matches_search_filters ?? true),
   };
 };
 
@@ -279,6 +281,7 @@ const setInboxSent = (recipientPersonUuid: string, message: string) => {
     location: 'archive',
     photoBlurhash: '',
     isVerified: false,
+    matchesSearchFilters: true,
     ...chatsConversation,
     ...introsConversation,
     lastMessage: message,
