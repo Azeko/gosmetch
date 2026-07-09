@@ -412,11 +412,8 @@ CREATE TABLE IF NOT EXISTS duo_session (
     pending_social_sub TEXT,
     push_token TEXT,
     last_online_time TIMESTAMP NOT NULL DEFAULT NOW(),
-
-    -- Answers given in the unauthenticated Q&A tab before sign-up, as a JSON
-    -- array of {question_id, answer, public}. Flushed onto the person and
-    -- cleared once the session resolves to one (sign-in or onboarding).
     answers JSONB,
+    asns BIGINT[],
 
     PRIMARY KEY (session_token_hash)
 );

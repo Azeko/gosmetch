@@ -3,8 +3,8 @@ FireHOL block-list service.
 
 Runs in its own container (see firehol.Dockerfile) so the (large) pytricia tries
 are held in memory once, rather than once per API worker. API workers reach it
-over HTTP via `antiabuse.firehol` (the client), which fails open — treating any
-error or timeout as "not blocked".
+over HTTP via `antiabuse.anonymizers.firehol` (the client), which fails open —
+treating any error or timeout as "not blocked".
 
 Because the client owns the timeout/fail-open policy and this service only sees
 a few requests per minute, the service itself is deliberately simple: a single
@@ -59,9 +59,7 @@ IPvXAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
 FIREHOL_PORT = int(os.environ.get("DUO_FIREHOL_PORT", "5070"))
 
 DEFAULT_LISTS = [
-    "firehol_abusers_30d.netset",
     "firehol_anonymous.netset",
-    "stopforumspam_365d.ipset",
 ]
 
 UPDATE_INTERVAL = timedelta(hours=4)

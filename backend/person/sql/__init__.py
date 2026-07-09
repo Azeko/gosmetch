@@ -1,6 +1,10 @@
 import constants
 from constants import MIN_CLUB_PAGE_MEMBERS, MAX_RELATED_CLUBS
-from commonsql import Q_IS_ALLOWED_CLUB_NAME, Q_COMPUTED_FLAIR
+from commonsql import (
+    Q_COMPUTED_FLAIR,
+    Q_IS_ALLOWED_CLUB_NAME,
+    Q_IS_REGISTERED_BY_NORMALIZED_EMAIL,
+)
 
 MAX_CLUB_SEARCH_RESULTS = 20
 
@@ -160,15 +164,15 @@ existing_person AS (
 # OTP and social paths share `Q_IS_BANNED` for that and run it as an
 # explicit step in the same transaction, which keeps both endpoints
 # following the same control flow.
-_OTP_CTE = """
+_OTP_CTE = f"""
 WITH random_otp AS (
     SELECT LPAD(FLOOR(RANDOM() * (10e5 + 1))::TEXT, 6, '0') AS otp
 ), zero_otp AS (
     SELECT '000000' AS otp
 ), is_registered AS (
-    SELECT 1 WHERE     EXISTS (SELECT 1 FROM person WHERE normalized_email = %(normalized_email)s)
+    SELECT 1 WHERE     {Q_IS_REGISTERED_BY_NORMALIZED_EMAIL}
 ), is_unregistered AS (
-    SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM person WHERE normalized_email = %(normalized_email)s)
+    SELECT 1 WHERE NOT {Q_IS_REGISTERED_BY_NORMALIZED_EMAIL}
 ), domain AS (
     SELECT
         SUBSTRING(%(email)s FROM POSITION('@' IN %(email)s) + 1) AS domain
@@ -215,7 +219,8 @@ INSERT INTO duo_session (
     pending_club_name,
     otp,
     ip_address,
-    answers
+    answers,
+    asns
 )
 SELECT
     %(session_token_hash)s,
@@ -235,7 +240,8 @@ SELECT
     %(pending_club_name)s,
     otp,
     %(ip_address)s,
-    %(answers)s::jsonb
+    %(answers)s::jsonb,
+    %(asns)s::bigint[]
 FROM
     otp
 RETURNING
@@ -3115,7 +3121,8 @@ INSERT INTO duo_session (
     ip_address,
     signed_in,
     pending_social_provider,
-    pending_social_sub
+    pending_social_sub,
+    asns
 ) VALUES (
     %(session_token_hash)s,
     %(person_id)s,
@@ -3124,7 +3131,8 @@ INSERT INTO duo_session (
     %(ip_address)s,
     TRUE,
     %(pending_social_provider)s,
-    %(pending_social_sub)s
+    %(pending_social_sub)s,
+    %(asns)s::bigint[]
 )
 """
 
