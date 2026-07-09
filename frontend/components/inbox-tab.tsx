@@ -13,7 +13,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import Animated from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useConversation } from '../chat/application-layer/hooks/conversation';
 import { refreshInbox } from '../chat/application-layer';
 import { TopNavBar } from './top-nav-bar';
@@ -132,6 +132,7 @@ const InboxTab = () => {
   const numIntros = stats?.numIntros ?? 0;
 
   const canApplySearchFilters =
+    sectionIndex === 0 &&
     numIntros >= MIN_INTROS_TO_APPLY_SEARCH_FILTERS;
 
   const introsNumericalLabel = (
@@ -281,7 +282,6 @@ const InboxTab = () => {
         showFilterHint={
           !isFilterHintDismissed &&
           !showArchive &&
-          sectionIndex === 0 &&
           canApplySearchFilters
         }
         onPressArchiveButton={onPressArchiveButton}
@@ -405,7 +405,7 @@ const InboxTabNavBar = ({
       </View>
       <View style={styles.navBarButtons}>
         {!showArchive && showFilterButton &&
-          <View>
+          <Animated.View entering={FadeIn} exiting={FadeOut}>
             <TopNavBarButton
               onPress={onPressFilterButton}
               iconName={applySearchFilters ? 'funnel' : 'funnel-outline'}
@@ -418,7 +418,7 @@ const InboxTabNavBar = ({
             {showFilterHint &&
               <InboxFilterHint onDismiss={onDismissFilterHint} />
             }
-          </View>
+          </Animated.View>
         }
         <TopNavBarButton
           onPress={onPressArchiveButton}
@@ -426,6 +426,7 @@ const InboxTabNavBar = ({
           position={null}
           secondary={false}
           label={showArchive ? "Inbox" : "Archive"}
+          style={styles.archiveButton}
         />
       </View>
     </TopNavBar>
@@ -478,7 +479,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     right: 10,
-    gap: 14,
+  },
+  // Spacing lives here rather than as `gap` on navBarButtons because
+  // reanimated's exiting animation positions the leaving filter button as if
+  // the row had no gap, making it jump flush against this button.
+  archiveButton: {
+    marginLeft: 14,
   },
   endText: {
     fontFamily: 'TruenoBold',
