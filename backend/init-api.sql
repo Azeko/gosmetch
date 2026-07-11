@@ -1673,6 +1673,7 @@ CREATE TABLE IF NOT EXISTS mam_message(
   -- The stanza's XMPP `id` attribute.
   stanza_id TEXT NOT NULL,
   reaction TEXT,
+  question_id SMALLINT,
   PRIMARY KEY(person_id, id)
 );
 

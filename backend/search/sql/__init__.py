@@ -1,5 +1,6 @@
 from constants import ONLINE_RECENTLY_SECONDS
 from commonsql import Q_COMPUTED_FLAIR
+from qanda import ANSWER_VISIBLE_TO_OTHERS
 
 # How many feed results to send to the client per request
 FEED_RESULTS_PER_PAGE = 50
@@ -2132,6 +2133,7 @@ LEFT JOIN LATERAL (
             'question_count_no', question.count_no,
             'question_yes_members', COALESCE(yes_facepile.j, '[]'::jsonb),
             'question_no_members', COALESCE(no_facepile.j, '[]'::jsonb),
+            'question_subject_answer', subject_answer.answer,
             'question_viewer', jsonb_build_object(
                 'person_uuid', searcher.searcher_uuid,
                 'url_slug', searcher.searcher_url_slug,
@@ -2161,6 +2163,19 @@ LEFT JOIN LATERAL (
         AND
             answer.question_id = question.id
     ) AS viewer_answer
+    ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT
+            answer.answer
+        FROM
+            answer
+        WHERE
+            answer.person_id = feed_page.id
+        AND
+            answer.question_id = question.id
+        AND
+            {ANSWER_VISIBLE_TO_OTHERS}
+    ) AS subject_answer
     ON TRUE
     LEFT JOIN LATERAL (
         {_question_facepile(True)}

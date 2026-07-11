@@ -1,5 +1,6 @@
 import redis.asyncio as redis
 import traceback
+from answerspush import answers_channel
 from service.api.chat.chatutil import (
     fetch_is_public,
     fetch_is_skipped,
@@ -104,6 +105,7 @@ async def _redis_subscribe_online(
     val = await redis_client.get(key)
 
     await pubsub.subscribe(key)
+    await pubsub.subscribe(answers_channel(username))
 
     if isinstance(val, bytes):
         val = val.decode()
@@ -146,6 +148,7 @@ async def _redis_unsubscribe_online(
 ) -> None:
     key = FMT_KEY.format(username=username)
     await pubsub.unsubscribe(key)
+    await pubsub.unsubscribe(answers_channel(username))
 
 async def redis_publish_online(
     redis_client: redis.Redis,

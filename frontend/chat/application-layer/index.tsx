@@ -15,6 +15,12 @@ import {
 import { notifyOwnLastMessageAt } from './hooks/read-receipt';
 import { ingestMamReaction } from './hooks/reaction';
 import {
+  ingestCardAttributes,
+  questionCardFromWire,
+  questionCardToFields,
+} from './hooks/partner-answer';
+import { QuoteCard } from '../../components/conversation-screen/quote';
+import {
   awaitFocusedConversationFetch,
   markConversationFetchDispatched,
 } from '../conversation-priority';
@@ -121,6 +127,12 @@ type ChatAudioMessage = ChatBaseMessage & {
 type ChatTextMessage = ChatBaseMessage & {
   type: 'chat-text'
   text: string
+  // Set when the message replies to a quiz card. The current answers aren't
+  // stored on the message; they live in the answer stores so they can update
+  // in real time.
+  questionId?: number
+  question?: string
+  questionTopic?: string
 };
 
 type ChatMessage = ChatAudioMessage | ChatTextMessage;
@@ -469,6 +481,7 @@ const sendMessage = async (
   content: {
     type: 'chat-text',
     text: string,
+    questionCard?: QuoteCard,
   } | {
     type: 'chat-audio',
     audioBase64: string,
@@ -517,6 +530,11 @@ const sendMessage = async (
           '@from': personUuidToJid(credentials.username),
           '@to': personUuidToJid(recipientPersonUuid),
           '@id': id,
+          // Only the id goes on the wire; the server derives the question
+          // text and both answers itself
+          ...(content.questionCard !== undefined ? {
+            '@question_id': String(content.questionCard.questionId),
+          } : {}),
           body: content.text,
         },
       };
@@ -641,6 +659,8 @@ const sendMessage = async (
     };
   } else if (response.status === 'sent') {
     const text = content.type === 'chat-text' ? content.text : '';
+    const questionCard =
+      content.type === 'chat-text' ? content.questionCard : undefined;
     const timestamp = response.stamp ? new Date(response.stamp) : new Date();
 
     setInboxSent(recipientPersonUuid, text);
@@ -661,6 +681,7 @@ const sendMessage = async (
         text,
         timestamp,
         fromCurrentUser: true,
+        ...(questionCard !== undefined ? questionCardToFields(questionCard) : {}),
       },
       status: response.status
     };
@@ -785,10 +806,14 @@ const onReceiveMessage = (
       }
 
       if (type === 'chat' && text){
+        // No-ops unless the message is a card reply; self-guards on the id.
+        ingestCardAttributes(jidToBareJid(from), doc.message);
+
         return {
           ...base,
           type: 'chat-text' as 'chat-text',
           text: text as string,
+          ...(questionCardFromWire(doc.message) ?? {}),
         };
       }
 
@@ -929,6 +954,12 @@ const fetchConversation = async (
 
       ingestMamReaction(mamId, reaction, reactionFrom);
 
+      // No-ops unless the message is a card reply; self-guards on the id.
+      ingestCardAttributes(
+        withPersonUuid,
+        doc.message.result.forwarded.message,
+      );
+
       if (audioUuid) {
         return {
           type: 'chat-audio',
@@ -950,6 +981,7 @@ const fetchConversation = async (
           mamId: mamId || undefined,
           timestamp: new Date(timestamp),
           fromCurrentUser: jidMatchesSignedInUser(from),
+          ...(questionCardFromWire(doc.message.result.forwarded.message) ?? {}),
         };
       }
     } catch {

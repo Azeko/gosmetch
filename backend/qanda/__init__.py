@@ -1,6 +1,30 @@
+"""
+Reads and writes a person's quiz answers and the derived personality vectors,
+feed events, and yes/no tallies.
+
+`ANSWER_VISIBLE_TO_OTHERS` is the one predicate that decides whether someone
+else may see an answer (public and actually answered). The live question-card
+path (`questioncard`), the MAM fetch (`Q_SELECT_MESSAGE`), and the feed's
+subject answer (`Q_FEED_V2`) all interpolate it, so the rule can't drift
+between them; it assumes the `answer` table is aliased `answer`.
+
+`_set_answer` writes the answer, personality columns, and feed event in one
+transaction, so they commit or roll back together. The answers-channel publish
+is left to the caller, which fires it only after the transaction commits and
+only when the visible answer changed, so a rolled-back or private edit never
+reaches the wire. Two answers written truly concurrently can serialize on the
+personality columns; `_set_answer_with_retry` re-runs on a fresh snapshot,
+which is safe because nothing publishes before commit. `write_event` is False
+for pre-signup answers, which must never advertise or publish.
+
+Yes/no tallies are batched because every answer bumps the same globally hot
+question row; the answerer's own row isn't hot, so it stays in `_set_answer`'s
+transaction unbatched.
+"""
 from dataclasses import dataclass
-from itertools import groupby
 import numpy
+import psycopg
+from answerspush import publish_answer_update
 from batcher import Batcher
 from constants import ANSWERED_QUESTION_EVENT_REFRESH_SECONDS
 from database import Row, Tx, api_tx
@@ -21,13 +45,16 @@ WHERE
 
 Q_GET_ANSWER = """
 SELECT
-    answer
+    answer,
+    public_
 FROM
     answer
 WHERE
     person_id = %(person_id)s AND
     question_id = %(question_id)s
 """
+
+ANSWER_VISIBLE_TO_OTHERS = "(answer.public_ AND answer.answer IS NOT NULL)"
 
 Q_UPSERT_ANSWER = """
 INSERT INTO answer (
@@ -125,13 +152,10 @@ WHERE session_token_hash = %(session_token_hash)s
 """
 
 
-# What a person's feed event should say after their latest answer write:
-# advertise the question, or stop advertising it
 @dataclass(frozen=True)
-class AnswerEventJob:
-    person_id: int
-    question_id: int
-    advertise: bool
+class AnswerWriteResult:
+    visible_answer: bool | None
+    visible_answer_changed: bool
 
 
 @dataclass(frozen=True)
@@ -139,30 +163,6 @@ class YesNoCountJob:
     question_id: int
     add_yes: int
     add_no: int
-
-
-async def _process_answer_event_batch(jobs: list[AnswerEventJob]) -> None:
-    # Grouped into runs of consecutive same-type jobs, one executemany per
-    # run. Runs execute in batch order, so a person who reverts one
-    # question's event and advertises another's within a batch gets the
-    # outcome of that sequence; a whole-batch set/revert split would not
-    # preserve it.
-    async with api_tx('read committed') as tx:
-        for advertise, run in groupby(jobs, key=lambda job: job.advertise):
-            if advertise:
-                await tx.executemany(Q_SET_ANSWERED_QUESTION_EVENT, [
-                    dict(
-                        person_id=job.person_id,
-                        question_id=job.question_id,
-                        refresh_seconds=ANSWERED_QUESTION_EVENT_REFRESH_SECONDS,
-                    )
-                    for job in run
-                ])
-            else:
-                await tx.executemany(Q_REVERT_ANSWERED_QUESTION_EVENT, [
-                    dict(person_id=job.person_id, question_id=job.question_id)
-                    for job in run
-                ])
 
 
 async def _process_yes_no_count_batch(jobs: list[YesNoCountJob]) -> None:
@@ -200,7 +200,8 @@ async def _set_answer(
     answer: bool | None,
     public: bool | None,
     delete: bool,
-) -> AnswerEventJob | None:
+    write_event: bool = True,
+) -> AnswerWriteResult | None:
     question_tx = await tx.execute(
         Q_QUESTION_SCORE_VECTORS,
         dict(question_ids=[question_id]),
@@ -258,32 +259,75 @@ async def _set_answer(
         count_answers=int(count),
     ))
 
-    # Returned rather than enqueued so callers only enqueue after their
-    # transaction commits; a rolled-back answer must not reach the feed
-    return AnswerEventJob(
-        person_id=person_id,
-        question_id=question_id,
-        advertise=not delete and answer is not None and bool(public),
+    is_visible = not delete and answer is not None and bool(public)
+
+    if write_event and is_visible:
+        await tx.execute(Q_SET_ANSWERED_QUESTION_EVENT, dict(
+            person_id=person_id,
+            question_id=question_id,
+            refresh_seconds=ANSWERED_QUESTION_EVENT_REFRESH_SECONDS,
+        ))
+    elif write_event:
+        await tx.execute(Q_REVERT_ANSWERED_QUESTION_EVENT, dict(
+            person_id=person_id,
+            question_id=question_id,
+        ))
+
+    old_visible = (
+        old['answer']
+        if old is not None and old['answer'] is not None and old['public_']
+        else None)
+    new_visible = answer if is_visible else None
+
+    return AnswerWriteResult(
+        visible_answer=new_visible,
+        visible_answer_changed=new_visible != old_visible,
     )
+
+_SET_ANSWER_TRIES = 3
+_SET_ANSWER_RETRYABLE = (
+    psycopg.errors.SerializationFailure,
+    psycopg.errors.DeadlockDetected,
+)
+
+async def _set_answer_with_retry(
+    person_id: int,
+    question_id: int,
+    answer: bool | None,
+    public: bool | None,
+    delete: bool,
+) -> AnswerWriteResult | None:
+    for attempt in range(_SET_ANSWER_TRIES):
+        try:
+            async with api_tx() as tx:
+                return await _set_answer(
+                    tx, person_id, question_id, answer, public, delete)
+        except _SET_ANSWER_RETRYABLE:
+            if attempt == _SET_ANSWER_TRIES - 1:
+                raise
+
+    return None
 
 async def post_answer(req: t.PostAnswer, s: t.SessionInfo) -> object | None:
     if s.person_id is None:
         return '', 500
 
-    async with api_tx() as tx:
-        event_job = await _set_answer(
-            tx,
-            s.person_id,
-            req.question_id,
-            req.answer,
-            req.public,
-            delete=False,
-        )
-
-    if event_job:
-        _answer_event_batcher.enqueue(event_job)
+    result = await _set_answer_with_retry(
+        s.person_id,
+        req.question_id,
+        req.answer,
+        req.public,
+        delete=False,
+    )
 
     _enqueue_yes_no_count(req.question_id, req.answer)
+
+    if result and result.visible_answer_changed and s.person_uuid:
+        await publish_answer_update(
+            username=s.person_uuid,
+            question_id=req.question_id,
+            answer=result.visible_answer,
+        )
 
     return None
 
@@ -291,18 +335,20 @@ async def delete_answer(req: t.DeleteAnswer, s: t.SessionInfo) -> object | None:
     if s.person_id is None:
         return '', 500
 
-    async with api_tx() as tx:
-        event_job = await _set_answer(
-            tx,
-            s.person_id,
-            req.question_id,
-            None,
-            None,
-            delete=True,
-        )
+    result = await _set_answer_with_retry(
+        s.person_id,
+        req.question_id,
+        None,
+        None,
+        delete=True,
+    )
 
-    if event_job:
-        _answer_event_batcher.enqueue(event_job)
+    if result and result.visible_answer_changed and s.person_uuid:
+        await publish_answer_update(
+            username=s.person_uuid,
+            question_id=req.question_id,
+            answer=result.visible_answer,
+        )
 
     return None
 
@@ -326,8 +372,6 @@ async def _flush_session_answers(
     for answer in answers:
         _enqueue_yes_no_count(answer['question_id'], answer['answer'])
 
-        # The returned event job is deliberately dropped: answers stashed
-        # before signup shouldn't advertise in the feed
         await _set_answer(
             tx,
             person_id,
@@ -335,6 +379,7 @@ async def _flush_session_answers(
             answer['answer'],
             answer.get('public', True),
             delete=False,
+            write_event=False,
         )
 
     await tx.execute(
@@ -342,18 +387,6 @@ async def _flush_session_answers(
         dict(session_token_hash=session_token_hash),
     )
 
-
-# Every answer write lands on two hot rows -- the answerer's person row (the
-# feed event) and the question row (the yes/no counts) -- and quiz players
-# write in bursts. Batching moves those writes off the request path and
-# coalesces each batch into one write per person/question.
-_answer_event_batcher = Batcher[AnswerEventJob](
-    process_fn=_process_answer_event_batch,
-    flush_interval=1.0,
-    min_batch_size=1,
-    max_batch_size=1000,
-    retry=False,
-)
 
 _yes_no_count_batcher = Batcher[YesNoCountJob](
     process_fn=_process_yes_no_count_batch,

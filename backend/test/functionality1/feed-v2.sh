@@ -588,9 +588,10 @@ test_joined_club () {
   q "delete from banned_club where name = 'cats'"
 }
 
-# Answer events and yes/no counts land via one-second batchers in the API,
-# not in the POST /answer transaction, so give them a moment to flush before
-# asserting on them
+# A question's yes/no counts land via a one-second batcher in the API, not in
+# the POST /answer transaction, so give it a moment to flush before asserting
+# on the feed's counts. (The answered-question event itself is now written in
+# the POST /answer transaction, so it needs no wait.)
 flush_answer_batchers () {
   sleep 2
 }
@@ -633,16 +634,18 @@ answered_question_feed_items () {
 
 expected_answered_question_item () {
   local name=$1
-  local count_yes_members=$2
-  local count_no_members=$3
-  local count_yes=$4
-  local count_no=$5
-  local viewer_answer=$6
-  local viewer_public=$7
-  local match_percentage=$8
+  local subject_answer=$2
+  local count_yes_members=$3
+  local count_no_members=$4
+  local count_yes=$5
+  local count_no=$6
+  local viewer_answer=$7
+  local viewer_public=$8
+  local match_percentage=$9
 
   jq -nS \
     --arg name "$name" \
+    --argjson subject_answer "$subject_answer" \
     --argjson question_id "$question_id" \
     --arg question_text "$question_text" \
     --arg question_topic "$question_topic" \
@@ -674,6 +677,7 @@ expected_answered_question_item () {
       "question_count_no": $count_no,
       "question_yes_members": members($count_yes_members),
       "question_no_members": members($count_no_members),
+      "question_subject_answer": $subject_answer,
       "question_viewer": {
         "person_uuid": "redacted_nonnull_value",
         "url_slug": "redacted_nonnull_value",
@@ -758,8 +762,8 @@ test_answered_question () {
   response=$(answered_question_feed_items)
   expected=$(
     jq -sS . \
-      <(expected_answered_question_item user2 1 1 2 1 null null 50) \
-      <(expected_answered_question_item user3 1 1 2 1 null null 50)
+      <(expected_answered_question_item user2 true 1 1 2 1 null null 50) \
+      <(expected_answered_question_item user3 false 1 1 2 1 null null 50)
   )
   diff -u --color <(echo "$response") <(echo "$expected")
 
@@ -778,9 +782,9 @@ test_answered_question () {
   response=$(answered_question_feed_items)
   expected=$(
     jq -sS . \
-      <(expected_answered_question_item user1 2 1 3 1 null null 50) \
-      <(expected_answered_question_item user2 2 1 3 1 null null 50) \
-      <(expected_answered_question_item user3 2 1 3 1 null null 50)
+      <(expected_answered_question_item user1 true 2 1 3 1 null null 50) \
+      <(expected_answered_question_item user2 true 2 1 3 1 null null 50) \
+      <(expected_answered_question_item user3 false 2 1 3 1 null null 50)
   )
   diff -u --color <(echo "$response") <(echo "$expected")
 
@@ -860,9 +864,9 @@ test_answered_question () {
   response=$(answered_question_feed_items)
   expected=$(
     jq -sS . \
-      <(expected_answered_question_item user1 2 1 3 2 false true "$match_user1") \
-      <(expected_answered_question_item user2 2 1 3 2 false true "$match_user2") \
-      <(expected_answered_question_item user3 2 1 3 2 false true "$match_user3")
+      <(expected_answered_question_item user1 true 2 1 3 2 false true "$match_user1") \
+      <(expected_answered_question_item user2 true 2 1 3 2 false true "$match_user2") \
+      <(expected_answered_question_item user3 false 2 1 3 2 false true "$match_user3")
   )
   diff -u --color <(echo "$response") <(echo "$expected")
 
@@ -879,9 +883,9 @@ test_answered_question () {
   response=$(answered_question_feed_items)
   expected=$(
     jq -sS . \
-      <(expected_answered_question_item user1 2 1 3 3 false false "$match_user1") \
-      <(expected_answered_question_item user2 2 1 3 3 false false "$match_user2") \
-      <(expected_answered_question_item user3 2 1 3 3 false false "$match_user3")
+      <(expected_answered_question_item user1 true 2 1 3 3 false false "$match_user1") \
+      <(expected_answered_question_item user2 true 2 1 3 3 false false "$match_user2") \
+      <(expected_answered_question_item user3 false 2 1 3 3 false false "$match_user3")
   )
   diff -u --color <(echo "$response") <(echo "$expected")
 
@@ -901,8 +905,8 @@ test_answered_question () {
   response=$(answered_question_feed_items)
   expected=$(
     jq -sS . \
-      <(expected_answered_question_item user1 2 0 3 4 false false "$match_user1") \
-      <(expected_answered_question_item user2 2 0 3 4 false false "$match_user2")
+      <(expected_answered_question_item user1 true 2 0 3 4 false false "$match_user1") \
+      <(expected_answered_question_item user2 true 2 0 3 4 false false "$match_user2")
   )
   diff -u --color <(echo "$response") <(echo "$expected")
 
@@ -921,7 +925,7 @@ test_answered_question () {
   response=$(answered_question_feed_items)
   expected=$(
     jq -sS . \
-      <(expected_answered_question_item user1 1 0 3 4 false false "$match_user1")
+      <(expected_answered_question_item user1 true 1 0 3 4 false false "$match_user1")
   )
   diff -u --color <(echo "$response") <(echo "$expected")
 

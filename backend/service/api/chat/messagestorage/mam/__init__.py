@@ -1,5 +1,16 @@
+"""
+Reads and writes the message archive (MAM).
+
+`mam_message.question_id` has no foreign key on purpose: messages are inserted
+in shared batches, so one bad reference would abort the whole batch. The chat
+server validates question ids before storing instead. Card answers are joined
+fresh on every fetch, so a partner answer deleted or made private since the
+message was sent simply disappears; the viewer's own answer is unfiltered (it's
+theirs, and seeds the client's answer store).
+"""
 from dataclasses import dataclass
 from database import Tx, api_tx
+from qanda import ANSWER_VISIBLE_TO_OTHERS
 from service.api.chat.chatutil import (
     LSERVER,
     fetch_has_gold,
@@ -16,6 +27,7 @@ from chatprotocol.outbound import (
     MamResult,
     Outbound,
     ReadReceipt,
+    answer_to_wire,
 )
 import uuid
 
@@ -30,6 +42,7 @@ INSERT INTO
         audio_uuid,
         body,
         stanza_id,
+        question_id,
         person_id
     )
 -- The sender's archive copy (direction 'O') is always stored. The recipient's
@@ -44,6 +57,7 @@ SELECT
     %(audio_uuid)s,
     %(body)s,
     %(stanza_id)s,
+    %(question_id)s::SMALLINT,
     (SELECT id FROM person WHERE uuid = uuid_or_null(%(from_username)s))
 UNION ALL
 SELECT
@@ -54,6 +68,7 @@ SELECT
     %(audio_uuid)s,
     %(body)s,
     %(stanza_id)s,
+    %(question_id)s::SMALLINT,
     (SELECT id FROM person WHERE uuid = uuid_or_null(%(to_username)s))
 WHERE
     %(deliver_to_recipient)s::BOOLEAN
@@ -68,7 +83,9 @@ WITH page AS (
         mam_message.stanza_id,
         mam_message.body,
         mam_message.audio_uuid,
-        mam_message.reaction
+        mam_message.reaction,
+        mam_message.question_id,
+        mam_message.person_id AS viewer_id
     FROM
         mam_message
     JOIN
@@ -86,13 +103,61 @@ WITH page AS (
         mam_message.id DESC
     LIMIT
         LEAST(50, COALESCE(%(max)s, 50))
+),
+partner AS (
+    SELECT
+        id AS partner_id
+    FROM
+        person
+    WHERE
+        uuid = uuid_or_null(%(to_username)s)
 )
 SELECT
-    *
+    page.*,
+    question.question AS question,
+    question.topic AS question_topic,
+    viewer_answer.answer AS viewer_answer,
+    viewer_answer.public_ AS viewer_answer_public,
+    partner_answer.answer AS partner_answer
 FROM
     page
+LEFT JOIN
+    partner
+ON
+    TRUE
+LEFT JOIN
+    question
+ON
+    question.id = page.question_id
+LEFT JOIN LATERAL (
+    SELECT
+        answer.answer,
+        answer.public_
+    FROM
+        answer
+    WHERE
+        answer.person_id = page.viewer_id
+    AND
+        answer.question_id = page.question_id
+) AS viewer_answer
+ON
+    page.question_id IS NOT NULL
+LEFT JOIN LATERAL (
+    SELECT
+        answer.answer
+    FROM
+        answer
+    WHERE
+        answer.person_id = partner.partner_id
+    AND
+        answer.question_id = page.question_id
+    AND
+        {ANSWER_VISIBLE_TO_OTHERS}
+) AS partner_answer
+ON
+    page.question_id IS NOT NULL
 ORDER BY
-    id
+    page.id
 """
 
 
@@ -117,6 +182,7 @@ class StoreMamMessageJob:
     message_body: str
     audio_uuid: str | None
     deliver_to_recipient: bool = True
+    question_id: int | None = None
 
 
 async def get_conversation(
@@ -139,6 +205,7 @@ async def process_store_mam_message_batch(tx: Tx, batch: list[StoreMamMessageJob
             audio_uuid=message.audio_uuid,
             body=message.message_body,
             stanza_id=message.id,
+            question_id=message.question_id,
             deliver_to_recipient=message.deliver_to_recipient,
         )
         for message in batch
@@ -194,6 +261,12 @@ async def _get_conversation(
             audio_uuid=row['audio_uuid'],
             reaction=reaction,
             reaction_from=reaction_from,
+            question_id=row['question_id'],
+            question=row['question'],
+            question_topic=row['question_topic'],
+            viewer_answer=answer_to_wire(row['viewer_answer']),
+            viewer_answer_public=row['viewer_answer_public'],
+            partner_answer=answer_to_wire(row['partner_answer']),
         ))
 
     # The receipt belongs under the most recent outgoing message, so it's only

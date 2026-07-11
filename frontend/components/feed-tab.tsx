@@ -52,9 +52,9 @@ import { Flag } from "react-native-feather";
 import { AudioPlayer } from './audio-player';
 import { useSkipped } from '../hide-and-block/hide-and-block';
 import { TopNavBarButton } from './top-nav-bar-button';
-import { setQuote } from './conversation-screen/quote';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faReply } from '@fortawesome/free-solid-svg-icons/faReply';
+import { quizCardQuoteText } from './conversation-screen/quote';
+import { useNavigationToConversation } from '../navigation/use-navigation-to-conversation';
+import { ReplyButton } from './reply-button';
 import { OnlineIndicator } from './online-indicator';
 import { useAppTheme } from '../app-theme/app-theme';
 import { usePressableAnimation } from '../animation/animation';
@@ -155,6 +155,9 @@ const AnsweredQuestionFieldsSchema = DataItemBaseSchema.extend({
   question_count_no: z.number(),
   question_yes_members: z.array(FacepileMemberSchema),
   question_no_members: z.array(FacepileMemberSchema),
+  // The feed subject's answer while it's publicly visible, so replying can
+  // quote it
+  question_subject_answer: z.boolean().nullable(),
   // The viewer's own answer, private or not; `public_` is null when they
   // haven't answered
   question_viewer: FacepileViewerSchema.extend({
@@ -339,25 +342,6 @@ const useNavigationToProfileGallery = (photoUuid: string) => {
       }
     );
   }, [photoUuid]);
-};
-
-const useNavigationToConversation = (
-  personUuid: string,
-  name: string,
-  photoUuid: string | null,
-  photoBlurhash: string | null,
-  quote: string,
-) => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootParamList>>();
-
-  return useCallback((e: GestureResponderEvent) => {
-    e.preventDefault();
-
-    setQuote({ text: quote, attribution: name });
-
-    setProspectHint(personUuid, { name, photoUuid, photoBlurhash });
-    navigation.navigate('Conversation Screen', { personUuid });
-  }, [personUuid, name, photoUuid, photoBlurhash, quote]);
 };
 
 const AgeGenderLocation = ({
@@ -1181,6 +1165,23 @@ const FeedItemAnsweredQuestion = ({
     [fields.answered_question_id],
   );
 
+  const quoteText = quizCardQuoteText(
+    fields.question_text, fields.question_subject_answer);
+
+  const onPressReply = useNavigationToConversation(
+    fields.person_uuid,
+    fields.name,
+    fields.photo_uuid,
+    fields.photo_blurhash,
+    quoteText,
+    {
+      questionId: fields.answered_question_id,
+      question: fields.question_text,
+      topic: fields.question_topic,
+      subjectAnswer: fields.question_subject_answer,
+    },
+  );
+
   const props = isMobile() ? {
     onPress,
     onPressIn,
@@ -1257,6 +1258,7 @@ const FeedItemAnsweredQuestion = ({
           }}
           maxFontSize={18}
           extraChildren={extraChildren}
+          onPressReply={onPressReply}
         >
           {fields.question_text}
         </NonInteractiveQuizCard>
@@ -1496,30 +1498,7 @@ const FeedItemUpdatedBio = ({
               {fields.added_text}
             </DefaultText>
           </View>
-          <View style={{ alignItems: 'flex-end' }} >
-            <Pressable
-              style={{
-                flexDirection: 'row',
-                gap: 6,
-                paddingRight: 5,
-              }}
-              hitSlop={20}
-              onPress={onPressReply}
-            >
-              <DefaultText style={{ fontWeight: 700 }}>
-                Reply
-              </DefaultText>
-              <FontAwesomeIcon
-                icon={faReply}
-                size={16}
-                color={appTheme.secondaryColor}
-                style={{
-                  /* @ts-ignore */
-                  outline: 'none',
-                }}
-              />
-            </Pressable>
-          </View>
+          <ReplyButton onPress={onPressReply} />
         </View>
       </Animated.View>
     </Pressable>
