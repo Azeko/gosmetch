@@ -321,6 +321,12 @@ const setInboxRecieved = (conversation: Conversation) => {
   const inbox = cloneInboxForUpdate();
   if (!inbox) return;
 
+  const existing =
+    (inbox.chats.conversationsMap[conversation.personUuid] ??
+     inbox.intros.conversationsMap[conversation.personUuid] ??
+     inbox.archive.conversationsMap[conversation.personUuid]) as
+      Conversation | undefined;
+
   const conversations = [
     ...inbox.chats.conversations,
     ...inbox.intros.conversations,
@@ -329,7 +335,15 @@ const setInboxRecieved = (conversation: Conversation) => {
 
   conversations.push(conversation);
 
-  notifyOnWeb(conversation.name, conversation.lastMessage);
+  // A retraction (e.g. a cleared reaction) reuses the row's old timestamp, so
+  // only genuinely new activity notifies
+  const hasNewActivity =
+    existing === undefined ||
+    conversation.lastMessageTimestamp > existing.lastMessageTimestamp;
+
+  if (!conversation.lastMessageRead && hasNewActivity) {
+    notifyOnWeb(conversation.name, conversation.lastMessage);
+  }
 
   notify<Inbox>('inbox', conversationsToInbox(conversations));
 };
@@ -428,26 +442,26 @@ const authenticate = async () => {
   ]);
 };
 
-const markDisplayed = async (message: ChatMessage) => {
-  if (message.fromCurrentUser) return;
+// The server marks the whole conversation displayed; `messageId` is inert.
+const markDisplayed = async (otherPersonUuid: string, messageId: string) => {
+  if (!credentials) return;
 
-  if (!isValidUuid(jidToBareJid(message.from))) return;
-  if (!isValidUuid(jidToBareJid(message.to))) return;
+  if (!isValidUuid(otherPersonUuid)) return;
 
   const data = {
     message: {
-      '@to': message.from,
-      '@from': message.to,
+      '@to': personUuidToJid(otherPersonUuid),
+      '@from': personUuidToJid(credentials.username),
       displayed: {
         '@xmlns': 'urn:xmpp:chat-markers:0',
-        '@id': message.id,
+        '@id': messageId,
       },
     }
   };
 
   await send({ data });
 
-  setInboxDisplayed(jidToBareJid(message.from));
+  setInboxDisplayed(otherPersonUuid);
 };
 
 const sendMessage = async (
@@ -789,7 +803,20 @@ const onReceiveMessage = (
     return null;
   };
 
+  const _onReceiveReaction = async (doc: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const reaction = doc?.duo_reaction;
+
+    if (!reaction) return;
+    if (otherPersonUuid === undefined) return;
+    if (!doMarkDisplayed) return;
+    if (jidToBareJid(reaction['@from'] ?? '') !== otherPersonUuid) return;
+
+    await markDisplayed(otherPersonUuid, reaction['@mam_id'] ?? '');
+  };
+
   const _onReceiveMessage = async (doc: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    await _onReceiveReaction(doc);
+
     const unpacked = unpackDoc(doc);
 
     if (!unpacked) {
@@ -830,8 +857,8 @@ const onReceiveMessage = (
       notify(`message-from-${bareFrom}`);
     }
 
-    if (otherPersonUuid !== undefined && doMarkDisplayed) {
-      await markDisplayed(message);
+    if (otherPersonUuid !== undefined && doMarkDisplayed && !message.fromCurrentUser) {
+      await markDisplayed(otherPersonUuid, message.id);
     }
 
     if (callback !== undefined) {
@@ -966,7 +993,7 @@ const fetchConversation = async (
 
   if (response !== 'timeout' && response.length > 0) {
     const lastMessage = response[response.length - 1];
-    await markDisplayed(lastMessage);
+    await markDisplayed(withPersonUuid, lastMessage.id);
   }
 
   // Reconcile whether our message is the conversation's last one against the

@@ -178,6 +178,8 @@ WITH viewer AS (
     SELECT
         uuid_or_null(split_part(remote_bare_jid, '@', 1)) AS prospect_uuid,
         body,
+        reaction,
+        reaction_body,
         COALESCE(unread_count, 0) AS unread_count,
         timestamp
     FROM
@@ -189,6 +191,8 @@ WITH viewer AS (
     SELECT
         entry.prospect_uuid,
         entry.body,
+        entry.reaction,
+        entry.reaction_body,
         entry.unread_count,
         entry.timestamp,
         prospect.url_slug AS url_slug,
@@ -321,6 +325,8 @@ SELECT
     is_available,
     location,
     body AS last_message,
+    reaction,
+    reaction_body,
     unread_count = 0 AS last_message_read,
     timestamp AS last_message_timestamp,
     CASE
@@ -456,7 +462,10 @@ WITH upsert_sender AS (
         body = EXCLUDED.body,
         direction = EXCLUDED.direction,
         timestamp = EXCLUDED.timestamp,
-        unread_count = 0
+        unread_count = 0,
+        reaction = NULL,
+        reaction_target_mam_id = NULL,
+        reaction_body = NULL
 ), upsert_recipient AS (
     -- Skipped (the SELECT returns no rows) when %(deliver_to_recipient)s is
     -- false -- i.e. the sender is shadow-banned -- so the recipient's inbox
@@ -492,9 +501,83 @@ WITH upsert_sender AS (
         body = EXCLUDED.body,
         direction = EXCLUDED.direction,
         timestamp = EXCLUDED.timestamp,
-        unread_count = COALESCE(inbox.unread_count, 0) + 1
+        unread_count = COALESCE(inbox.unread_count, 0) + 1,
+        reaction = NULL,
+        reaction_target_mam_id = NULL,
+        reaction_body = NULL
 )
 SELECT 1
+"""
+
+
+Q_SET_INBOX_REACTION = f"""
+WITH update_reactor AS (
+    UPDATE inbox SET
+        reaction = %(reaction)s,
+        reaction_target_mam_id = %(reaction_target_mam_id)s,
+        reaction_body = %(reaction_body)s,
+        box = 'chats',
+        timestamp = EXTRACT(EPOCH FROM NOW()) * 1e6,
+        unread_count = 0
+    WHERE
+        luser = %(reactor_username)s
+    AND
+        remote_bare_jid = %(partner_jid)s
+)
+UPDATE inbox SET
+    reaction = %(reaction)s,
+    reaction_target_mam_id = %(reaction_target_mam_id)s,
+    reaction_body = %(reaction_body)s,
+    box = 'chats',
+    timestamp = EXTRACT(EPOCH FROM NOW()) * 1e6,
+    unread_count = CASE
+        WHEN reaction_target_mam_id = %(reaction_target_mam_id)s
+        THEN GREATEST(COALESCE(unread_count, 0), 1)
+        ELSE COALESCE(unread_count, 0) + 1
+    END
+WHERE
+    %(deliver_to_recipient)s::BOOLEAN
+AND
+    luser = %(partner_username)s
+AND
+    remote_bare_jid = %(reactor_jid)s
+"""
+
+
+Q_CLEAR_INBOX_REACTION = f"""
+WITH update_reactor AS (
+    UPDATE inbox SET
+        reaction = NULL,
+        reaction_target_mam_id = NULL,
+        reaction_body = NULL
+    WHERE
+        luser = %(reactor_username)s
+    AND
+        remote_bare_jid = %(partner_jid)s
+    AND
+        reaction_target_mam_id = %(reaction_target_mam_id)s
+    RETURNING
+        1
+), update_partner AS (
+    UPDATE inbox SET
+        reaction = NULL,
+        reaction_target_mam_id = NULL,
+        reaction_body = NULL,
+        unread_count = GREATEST(COALESCE(unread_count, 0) - 1, 0)
+    WHERE
+        %(deliver_to_recipient)s::BOOLEAN
+    AND
+        luser = %(partner_username)s
+    AND
+        remote_bare_jid = %(reactor_jid)s
+    AND
+        reaction_target_mam_id = %(reaction_target_mam_id)s
+    RETURNING
+        1
+)
+SELECT
+    EXISTS (SELECT 1 FROM update_reactor) AS reactor_reverted,
+    EXISTS (SELECT 1 FROM update_partner) AS partner_reverted
 """
 
 
@@ -528,6 +611,17 @@ class MarkDisplayedJob:
     to_username: str
 
 
+def reaction_inbox_body(emoji: str, target_body: str) -> str:
+    return f'Reacted {emoji} to: {target_body}'
+
+
+def _composed_body(body: str, reaction: str | None, reaction_body: str | None) -> str:
+    if reaction is None or reaction_body is None:
+        return body
+
+    return reaction_inbox_body(reaction, reaction_body)
+
+
 async def get_inbox(query_id: str, username: str) -> list[Outbound]:
     """
     Fetches the user's inbox using the query_id and builds an `InboxResult` for
@@ -540,7 +634,8 @@ async def get_inbox(query_id: str, username: str) -> list[Outbound]:
     messages: list[Outbound] = []
     for row in rows:
         try:
-            body = row['body']
+            body = _composed_body(
+                row['body'], row['reaction'], row['reaction_body'])
             if not body:
                 continue
 
@@ -590,7 +685,8 @@ def _conversation_from_row(row: Row) -> InboxConversation:
         is_available=row['is_available'],
         location=row['location'],
         matches_search_filters=row['matches_search_filters'],
-        last_message=row['last_message'],
+        last_message=_composed_body(
+            row['last_message'], row['reaction'], row['reaction_body']),
         last_message_read=row['last_message_read'],
         # The query returns raw microseconds; formatting here (rather than via
         # `to_char` in SQL) keeps the per-row timestamp work off the shared DB.
@@ -661,6 +757,66 @@ async def get_inbox_entry(
     except Exception:
         print(traceback.format_exc())
         return []
+
+
+async def set_inbox_reaction(
+    tx: Tx,
+    reactor_username: str,
+    partner_username: str,
+    reaction_target_mam_id: int,
+    emoji: str,
+    target_body: str,
+    deliver_to_recipient: bool,
+) -> None:
+    await tx.execute(
+        Q_SET_INBOX_REACTION,
+        dict(
+            reactor_username=reactor_username,
+            partner_username=partner_username,
+            reactor_jid=f'{reactor_username}@{LSERVER}',
+            partner_jid=f'{partner_username}@{LSERVER}',
+            reaction_target_mam_id=reaction_target_mam_id,
+            reaction=emoji,
+            reaction_body=target_body,
+            deliver_to_recipient=deliver_to_recipient,
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class ClearedInboxReaction:
+    reactor_reverted: bool = False
+    partner_reverted: bool = False
+
+
+async def clear_inbox_reaction(
+    tx: Tx,
+    reactor_username: str,
+    partner_username: str,
+    reaction_target_mam_id: int,
+    deliver_to_recipient: bool,
+) -> ClearedInboxReaction:
+    """
+    Removes the reaction from each inbox row that still reflects it; the
+    flags say whose rows changed and so need a fresh inbox entry pushed.
+    """
+    await tx.execute(
+        Q_CLEAR_INBOX_REACTION,
+        dict(
+            reactor_username=reactor_username,
+            partner_username=partner_username,
+            reactor_jid=f'{reactor_username}@{LSERVER}',
+            partner_jid=f'{partner_username}@{LSERVER}',
+            reaction_target_mam_id=reaction_target_mam_id,
+            deliver_to_recipient=deliver_to_recipient,
+        ),
+    )
+    row = await tx.fetchone()
+
+    return ClearedInboxReaction(
+        reactor_reverted=bool(row and row['reactor_reverted']),
+        partner_reverted=bool(row and row['partner_reverted']),
+    )
 
 
 async def process_upsert_conversation_batch(tx: Tx, batch: list[UpsertConversationJob]) -> None:
