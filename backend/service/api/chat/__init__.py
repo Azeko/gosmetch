@@ -1,5 +1,4 @@
 import dataclasses
-import os
 from functools import partial
 from database import (
     api_tx,
@@ -17,7 +16,7 @@ import webpushsender
 from async_lru_cache import AsyncLruCache
 from unseennotificationcount import increment_unseen_notification_count
 import random
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from service.api.chat.robot9000 import Q_SELECT_INTRO_HASH, upsert_intro_hash
 from service.api.chat.mayberegister import register_push_token
@@ -67,6 +66,10 @@ from service.api.chat.chatutil import (
     now_microseconds,
     fetch_id_from_username,
     redis_has_subscribers,
+    redis_publish_many,
+    REDIS_HOST,
+    REDIS_PORT,
+    REDIS_WORKER_CLIENT,
 )
 from chatprotocol.message import (
     AudioMessage,
@@ -106,12 +109,10 @@ from chatprotocol.outbound import (
     Pong,
     ReactionBlocked,
     ReactionDelivered,
-    ReadReceipt,
     RegistrationSuccessful,
     ServerError,
     answer_to_wire,
     from_bus,
-    to_bus,
 )
 from service.api.chat.questioncard import (
     fetch_card,
@@ -130,14 +131,6 @@ from util import truncate_text, Json
 from service.api.chat.verification import (
     verification_required,
 )
-
-# Global publisher connection, created once per worker.
-REDIS_HOST: str = os.environ.get("DUO_REDIS_HOST", "redis")
-REDIS_PORT: int = int(os.environ.get("DUO_REDIS_PORT", 6379))
-REDIS_WORKER_CLIENT: redis.Redis = redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        decode_responses=True)
 
 Q_HAS_MESSAGE = """
 SELECT
@@ -239,19 +232,6 @@ MAX_MESSAGE_LEN = 5000
 
 NON_ALPHANUMERIC_RE = regex.compile(r'[^\p{L}\p{N}]')
 REPEATED_CHARACTERS_RE = regex.compile(r'(.)\1{1,}')
-
-
-async def redis_publish(channel: str, message: str) -> None:
-    await REDIS_WORKER_CLIENT.publish(channel, message)
-
-
-async def redis_publish_many(
-    channel: str,
-    messages: Iterable[Outbound],
-) -> object | None:
-    for message in messages:
-        await redis_publish(channel, to_bus(message))
-    return None
 
 
 async def redis_forward_to_websocket(
@@ -790,30 +770,18 @@ async def process_text(
     if isinstance(parsed, MarkDisplayed):
         displayed_to = parsed.to_username
 
-        mark_displayed(from_username=from_username, to_username=displayed_to)
-
-        # Nudge the original sender that their messages were read, but only if
-        # they're a gold user (only gold users can view read receipts). The
-        # nudge carries no timestamp: the client stamps it with its own clock,
-        # and the authoritative read time is served from the database when the
-        # conversation is fetched from the archive. The sender may receive more
-        # than one nudge for the same message (e.g. on re-open); the client
-        # ignores nudges that don't acknowledge a newer outgoing message.
-        #
-        # A shadow-banned reader's activity must stay invisible to others, so
-        # the nudge is suppressed for them (their own read state is still
-        # updated above, so their app behaves normally).
         reader_id = await fetch_id_from_username(from_username)
-        if \
-                reader_id is not None and \
-                not await fetch_is_shadow_banned(reader_id) and \
-                await fetch_has_gold(displayed_to):
-            await redis_publish_many(displayed_to, [
-                ReadReceipt(
-                    from_username=from_username,
-                    to_username=displayed_to,
-                )
-            ])
+        publish_receipt = (
+            reader_id is not None and
+            not await fetch_is_shadow_banned(reader_id) and
+            await fetch_has_gold(displayed_to)
+        )
+
+        mark_displayed(
+            from_username=from_username,
+            to_username=displayed_to,
+            publish_receipt=publish_receipt,
+        )
         return None
 
     if isinstance(parsed, ReactionMessage):

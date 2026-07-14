@@ -3,9 +3,12 @@ import traceback
 from batcher import Batcher
 from database import Row, Tx, api_tx
 from dataclasses import dataclass
+from datetime import datetime
 from service.api.chat.chatutil import (
     LSERVER,
+    format_datetime,
     format_timestamp,
+    redis_publish_many,
 )
 from chatprotocol.outbound import (
     InboxConversation,
@@ -14,6 +17,7 @@ from chatprotocol.outbound import (
     InboxResult,
     InboxSnapshot,
     Outbound,
+    ReadReceipt,
 )
 
 Q_GET_INBOX = f"""
@@ -581,18 +585,27 @@ SELECT
 """
 
 
-Q_MARK_DISPLAYED = f"""
+Q_MARK_DISPLAYED = """
 UPDATE
     inbox
 SET
     displayed_at = NOW(),
     unread_count = 0
+FROM
+    unnest(
+        %(lusers)s::text[],
+        %(remote_bare_jids)s::text[]
+    ) AS target(luser, remote_bare_jid)
 WHERE
-    luser = %(luser)s
+    inbox.luser = target.luser
 AND
-    remote_bare_jid = %(remote_bare_jid)s
+    inbox.remote_bare_jid = target.remote_bare_jid
 AND
-    unread_count > 0
+    inbox.unread_count > 0
+RETURNING
+    inbox.luser,
+    inbox.remote_bare_jid,
+    inbox.displayed_at
 """
 
 
@@ -609,6 +622,7 @@ class UpsertConversationJob:
 class MarkDisplayedJob:
     from_username: str
     to_username: str
+    publish_receipt: bool
 
 
 def reaction_inbox_body(emoji: str, target_body: str) -> str:
@@ -836,34 +850,76 @@ async def process_upsert_conversation_batch(tx: Tx, batch: list[UpsertConversati
     await tx.executemany(Q_UPSERT_CONVERSATION, params_seq)
 
 
-def mark_displayed(from_username: str, to_username: str) -> None:
-    """
-    Marks the conversation as read. Whether the read actually advances the
-    stored read state is decided in the database: Q_MARK_DISPLAYED only touches
-    the row (and bumps displayed_at) when there are unread messages, so
-    re-opening an already-read conversation is a no-op.
-    """
-    job = MarkDisplayedJob(from_username=from_username, to_username=to_username)
+def mark_displayed(
+    from_username: str,
+    to_username: str,
+    publish_receipt: bool,
+) -> None:
+    _mark_displayed_batcher.enqueue(
+        MarkDisplayedJob(
+            from_username=from_username,
+            to_username=to_username,
+            publish_receipt=publish_receipt,
+        )
+    )
 
-    _mark_displayed_batcher.enqueue(job)
+
+async def _write_mark_displayed(
+    conversations: list[tuple[str, str]],
+) -> dict[tuple[str, str], datetime]:
+    """
+    Marks each (reader, sender) conversation as read, returning the recorded read
+    time only for conversations that had unread messages; an already-read
+    conversation is absent from the result.
+    """
+    targets = list({
+        (reader, f'{sender}@{LSERVER}')
+        for reader, sender in conversations
+    })
+
+    if not targets:
+        return {}
+
+    try:
+        async with api_tx('read committed') as tx:
+            await tx.execute(Q_MARK_DISPLAYED, dict(
+                lusers=[luser for luser, _ in targets],
+                remote_bare_jids=[jid for _, jid in targets],
+            ))
+            rows = await tx.fetchall()
+    except Exception:
+        print(traceback.format_exc())
+        return {}
+
+    return {
+        (row['luser'], row['remote_bare_jid'].split('@')[0]): row['displayed_at']
+        for row in rows
+    }
 
 
 async def _process_mark_displayed_batch(batch: list[MarkDisplayedJob]) -> None:
-    params_seq = [
-        dict(
-            luser=job.from_username,
-            remote_bare_jid=f'{job.to_username}@{LSERVER}',
-        )
+    publish_receipt = {
+        (job.from_username, job.to_username): job.publish_receipt
         for job in batch
-    ]
+    }
 
-    async with api_tx('read committed') as tx:
-        await tx.executemany(Q_MARK_DISPLAYED, params_seq)
+    advanced = await _write_mark_displayed(list(publish_receipt))
+
+    for (reader, sender), displayed_at in advanced.items():
+        if not publish_receipt.get((reader, sender)):
+            continue
+        await redis_publish_many(sender, [
+            ReadReceipt(
+                from_username=reader,
+                to_username=sender,
+                stamp=format_datetime(displayed_at),
+            )
+        ])
 
 
 _mark_displayed_batcher = Batcher[MarkDisplayedJob](
     process_fn=_process_mark_displayed_batch,
-    flush_interval=1.0,
+    flush_interval=0.1,
     min_batch_size=1,
     max_batch_size=1000,
     retry=False,
