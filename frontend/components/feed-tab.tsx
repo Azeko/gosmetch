@@ -610,11 +610,11 @@ const facepileSpreadWidth = (slotCount: number) =>
 
 const FacepileAvatar = ({
   member,
-  spread,
+  navigatesOnPress,
   onRequestSpread,
 }: {
   member: FacepileMember
-  spread: boolean
+  navigatesOnPress: boolean
   onRequestSpread: () => void
 }) => {
   const handle = member.url_slug || member.person_uuid;
@@ -627,14 +627,14 @@ const FacepileAvatar = ({
   );
 
   const onPress = useCallback((e: GestureResponderEvent) => {
-    if (spread) {
+    if (navigatesOnPress) {
       navigateToProfile(e);
     } else {
       // Stop the web link navigating; the first press only spreads the pile
       e.preventDefault();
       onRequestSpread();
     }
-  }, [spread, navigateToProfile, onRequestSpread]);
+  }, [navigatesOnPress, navigateToProfile, onRequestSpread]);
 
   return (
     <Pressable onPress={onPress} {...makeLinkProps(`/${handle}`)}>
@@ -665,12 +665,12 @@ const FacepileAvatar = ({
 const ViewerFacepileAvatar = ({
   viewer,
   visible,
-  spread,
+  navigatesOnPress,
   onRequestSpread,
 }: {
   viewer: FacepileViewer
   visible: boolean
-  spread: boolean
+  navigatesOnPress: boolean
   onRequestSpread: () => void
 }) => {
   const { appTheme } = useAppTheme();
@@ -683,13 +683,13 @@ const ViewerFacepileAvatar = ({
   );
 
   const onPress = useCallback((e: GestureResponderEvent) => {
-    if (spread) {
+    if (navigatesOnPress) {
       navigateToProfile(e);
     } else {
       e.preventDefault();
       onRequestSpread();
     }
-  }, [spread, navigateToProfile, onRequestSpread]);
+  }, [navigatesOnPress, navigateToProfile, onRequestSpread]);
 
   const opacity = useSharedValue(visible ? 1 : 0);
 
@@ -812,6 +812,12 @@ const Facepile = ({
   // The viewer slot is always rendered, so it always occupies layout width
   const slotCount = members.length + 1;
 
+  const isSpreadable = members.length + (viewerVisible ? 1 : 0) > 1;
+
+  const isSpread = spread && isSpreadable;
+
+  const navigatesOnPress = isSpread || !isSpreadable;
+
   const anchorDistanceOf = (documentOrder: number) =>
     viewerPosition === 'start'
       ? members.length - documentOrder
@@ -820,7 +826,7 @@ const Facepile = ({
   const offsetOf = (documentOrder: number) =>
     spreadDirection
       * anchorDistanceOf(documentOrder)
-      * (spread ? FACEPILE_SPREAD_STEP : 0);
+      * (isSpread ? FACEPILE_SPREAD_STEP : 0);
 
   const zIndexOf = (documentOrder: number) =>
     viewerPosition === 'start'
@@ -836,7 +842,7 @@ const Facepile = ({
       <ViewerFacepileAvatar
         viewer={viewer}
         visible={viewerVisible}
-        spread={spread}
+        navigatesOnPress={navigatesOnPress}
         onRequestSpread={onRequestSpread}
       />
     </FacepileSlot>
@@ -849,9 +855,10 @@ const Facepile = ({
         // Spread grows away from the anchor; keep the anchored edge fixed so
         // the collapsed cluster stays put and only the reserved side widens
         justifyContent: viewerPosition === 'start' ? 'flex-end' : 'flex-start',
-        width: spread
+        width: isSpread
           ? facepileSpreadWidth(slotCount)
           : facepileCollapsedWidth(slotCount),
+        cursor: 'auto',
       }}
       onPress={onRequestSpread}
       // Raw DOM events rather than onHoverIn/onHoverOut: Pressable's
@@ -881,7 +888,7 @@ const Facepile = ({
           >
             <FacepileAvatar
               member={member}
-              spread={spread}
+              navigatesOnPress={navigatesOnPress}
               onRequestSpread={onRequestSpread}
             />
           </FacepileSlot>
