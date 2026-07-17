@@ -21,6 +21,11 @@ LAST_UPDATE_INTERVAL_SECONDS = 4 * 60  # 4 minutes
 # judged offline between refreshes and silently dropped from a live push.
 VISITOR_ONLINE_TIMEOUT_SECONDS = 2 * LAST_UPDATE_INTERVAL_SECONDS  # 8 minutes
 
+LAST_ONLINE_NOW_SECONDS = VISITOR_ONLINE_TIMEOUT_SECONDS
+
+LAST_ONLINE_DEFAULT_NAME = 'A month ago'
+LAST_ONLINE_DEFAULT_SECONDS = 30 * 24 * 60 * 60
+
 # Most online-status subscriptions a single chat connection may hold at once.
 # Once reached, the earliest subscriptions are evicted to make room for new
 # ones. Bounds the resources one client (possibly unauthenticated, since

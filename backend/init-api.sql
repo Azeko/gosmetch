@@ -186,6 +186,13 @@ CREATE TABLE IF NOT EXISTS looking_for (
     UNIQUE (name)
 );
 
+CREATE TABLE IF NOT EXISTS last_online (
+    id SMALLSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    seconds BIGINT NOT NULL,
+    UNIQUE (name)
+);
+
 CREATE TABLE IF NOT EXISTS yes_no (
     id SMALLSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -266,7 +273,6 @@ CREATE TABLE IF NOT EXISTS person (
     location_short_friendly TEXT NOT NULL,
     location_long_friendly TEXT NOT NULL,
 
-    -- TODO: CREATE INDEX ON person USING ivfflat (personality2 vector_ip_ops) WITH (lists = 100);
     -- There's 46 `trait`s. In principle, it's possible for someone to have a
     -- score of 0 for each trait. We add an extra, constant, non-zero dimension
     -- to avoid that.
@@ -692,6 +698,12 @@ CREATE TABLE IF NOT EXISTS search_preference_distance (
     PRIMARY KEY (person_id)
 );
 
+CREATE TABLE IF NOT EXISTS search_preference_last_online (
+    person_id INT REFERENCES person(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    last_online_id SMALLINT REFERENCES last_online(id) ON DELETE CASCADE,
+    PRIMARY KEY (person_id)
+);
+
 CREATE TABLE IF NOT EXISTS search_preference_height_cm (
     person_id INT REFERENCES person(id) ON DELETE CASCADE ON UPDATE CASCADE,
     min_height_cm SMALLINT,
@@ -961,6 +973,12 @@ CREATE INDEX IF NOT EXISTS idx__visited__object_person_id__updated_at
 CREATE INDEX IF NOT EXISTS idx__visited__subject_person_id__updated_at
     ON visited(subject_person_id, updated_at DESC);
 
+CREATE INDEX IF NOT EXISTS
+    idx__person__personality
+    ON person
+    USING ivfflat (personality vector_ip_ops)
+    WITH (lists = 100);
+
 
 --------------------------------------------------------------------------------
 -- DATA
@@ -1014,6 +1032,13 @@ INSERT INTO looking_for (name) VALUES ('Friends') ON CONFLICT (name) DO NOTHING;
 INSERT INTO looking_for (name) VALUES ('Short-term dating') ON CONFLICT (name) DO NOTHING;
 INSERT INTO looking_for (name) VALUES ('Long-term dating') ON CONFLICT (name) DO NOTHING;
 INSERT INTO looking_for (name) VALUES ('Marriage') ON CONFLICT (name) DO NOTHING;
+
+SELECT setval('last_online_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM last_online), FALSE);
+INSERT INTO last_online (name, seconds) VALUES ('Now', {{LAST_ONLINE_NOW_SECONDS}}) ON CONFLICT (name) DO NOTHING;
+INSERT INTO last_online (name, seconds) VALUES ('A day ago', 86400) ON CONFLICT (name) DO NOTHING;
+INSERT INTO last_online (name, seconds) VALUES ('A week ago', 604800) ON CONFLICT (name) DO NOTHING;
+INSERT INTO last_online (name, seconds) VALUES ('{{LAST_ONLINE_DEFAULT_NAME}}', {{LAST_ONLINE_DEFAULT_SECONDS}}) ON CONFLICT (name) DO NOTHING;
+INSERT INTO last_online (name, seconds) VALUES ('All time', 3153600000) ON CONFLICT (name) DO NOTHING;
 
 SELECT setval('relationship_status_id_seq', (SELECT COALESCE(MAX(id), 0) + 1 FROM relationship_status), FALSE);
 INSERT INTO relationship_status (name) VALUES ('Unanswered') ON CONFLICT (name) DO NOTHING;

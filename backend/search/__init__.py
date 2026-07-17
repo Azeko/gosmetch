@@ -9,16 +9,17 @@ from qanda.question import Q_QUESTION_SCORE_VECTORS
 from rediscache import redis_cache
 from collections.abc import Sequence
 from typing import Literal, Tuple
+from searchfilters import Q_SEARCH_PARAMETERS
 from search.sql import (
+    Q_APPLY_CLUB_PREFERENCE,
     Q_CACHED_SEARCH,
     Q_PUBLIC_SEARCH,
     Q_PUBLIC_SEARCH_WITH_ANSWERS,
     Q_QUIZ_SEARCH,
-    Q_SEARCH_PREFERENCE,
-    Q_UNCACHED_SEARCH_1,
-    Q_UNCACHED_SEARCH_2,
+    Q_DELETE_SEARCH_CACHE,
     Q_FEED,
     Q_FEED_V2,
+    build_uncached_search,
 )
 from dataclasses import dataclass
 from datetime import datetime
@@ -45,20 +46,26 @@ async def _uncached_search_results(
     tx: Tx,
     searcher_person_id: int,
     no: Tuple[int, int],
-    gender_preference: list[int],
 ) -> object:
     n, o = no
 
-    params = dict(
+    prefs = await tx.require_one(
+        Q_SEARCH_PARAMETERS,
+        dict(searcher_person_id=searcher_person_id),
+    )
+
+    uncached_search, params = build_uncached_search(
         searcher_person_id=searcher_person_id,
         n=n,
         o=o,
-        gender_preference=gender_preference,
+        prefs=prefs,
     )
 
     try:
-        await tx.execute(Q_UNCACHED_SEARCH_1, params)
-        await tx.execute(Q_UNCACHED_SEARCH_2, params)
+        await tx.execute("SET LOCAL ivfflat.iterative_scan = relaxed_order")
+
+        await tx.execute(Q_DELETE_SEARCH_CACHE, params)
+        await tx.execute(uncached_search, params)
         await tx.execute(Q_CACHED_SEARCH, params)
         return await tx.fetchall()
     except psycopg.errors.QueryCanceled:
@@ -128,10 +135,7 @@ async def get_search(
     async with api_tx('READ COMMITTED') as tx:
         await tx.execute('SET LOCAL statement_timeout = 10000') # 10 seconds
 
-        await tx.execute(Q_SEARCH_PREFERENCE, params)
-        rows = await tx.fetchall()
-
-        gender_preference = [row_int(row, 'gender_id') for row in rows]
+        await tx.execute(Q_APPLY_CLUB_PREFERENCE, params)
 
         if search_type == 'quiz-search':
             result = await _quiz_search_results(
@@ -144,8 +148,7 @@ async def get_search(
             result = await _uncached_search_results(
                 tx=tx,
                 searcher_person_id=s.person_id,
-                no=no,
-                gender_preference=gender_preference)
+                no=no)
 
         elif search_type == 'cached-search':
             if no is None:
@@ -158,9 +161,8 @@ async def get_search(
         else:
             raise Exception('Unexpected quiz type')
 
-    # Q_SEARCH_PREFERENCE clears `pending_club_name` for this person, so drop the
-    # now-stale cached session (see the sessioncache correctness model). Skip the
-    # call when there was nothing pending to clear.
+    # Q_APPLY_CLUB_PREFERENCE clears `pending_club_name`, so drop the now-stale
+    # cached session (see the sessioncache correctness model).
     if s.pending_club_name is not None:
         await sessioncache.delete_session(s.session_token_hash)
 

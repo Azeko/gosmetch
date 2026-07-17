@@ -13,11 +13,14 @@ services:
     build:
       context: .
       dockerfile: postgres.Dockerfile
+    shm_size: 1gb
     command: >
       postgres
       -c shared_preload_libraries=pg_stat_statements
       -c pg_stat_statements.track=all
       -c wal_level=logical
+      -c shared_buffers=1GB
+      -c random_page_cost=1.1
     ports:
       - "5432:5432"
     environment:
@@ -135,9 +138,6 @@ services:
       DUO_BOTO_ENDPOINT_URL: http://s3mock:9090
 
       DUO_CRON_EMAIL_POLL_SECONDS: '1'
-
-      DUO_CRON_AUTODEACTIVATE2_DRY_RUN: 'false'
-      DUO_CRON_AUTODEACTIVATE2_POLL_SECONDS: '1'
 
       DUO_CRON_INSERT_LAST_POLL_SECONDS: '1'
 

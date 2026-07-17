@@ -76,6 +76,11 @@ sudo sed \
   "s|^# *idle_in_transaction_session_timeout =.*|idle_in_transaction_session_timeout = '5min'|" \
   /etc/postgresql/16/main/postgresql.conf
 
+sudo sed \
+  -iE \
+  "s|^# *random_page_cost =.*|random_page_cost = 1.1|" \
+  /etc/postgresql/16/main/postgresql.conf
+
 sudo bash -c \
   "echo 'host    all             all             0.0.0.0/0               scram-sha-256' >> /etc/postgresql/16/main/pg_hba.conf"
 

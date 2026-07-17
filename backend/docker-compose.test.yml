@@ -14,6 +14,7 @@ services:
       postgres
       -c shared_preload_libraries=pg_stat_statements
       -c pg_stat_statements.track=all
+      -c random_page_cost=1.1
     ports:
       - "5432:5432"
     environment:
@@ -134,9 +135,6 @@ services:
       # Push notifications are recorded by the `pushmock` service so tests can
       # assert on them.
       DUO_NOTIFICATION_API_URL: http://pushmock:3002
-
-      DUO_CRON_AUTODEACTIVATE2_DRY_RUN: 'false'
-      DUO_CRON_AUTODEACTIVATE2_POLL_SECONDS: '1'
 
       DUO_CRON_INSERT_LAST_POLL_SECONDS: '1'
 
