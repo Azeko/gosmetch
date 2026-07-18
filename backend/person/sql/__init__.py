@@ -6,6 +6,7 @@ from constants import (
     MIN_CLUB_PAGE_MEMBERS,
 )
 from commonsql import (
+    PHOTO_GEOMETRY,
     Q_COMPUTED_FLAIR,
     Q_IS_ALLOWED_CLUB_NAME,
     Q_IS_REGISTERED_BY_NORMALIZED_EMAIL,
@@ -817,7 +818,8 @@ WITH prospect_base AS (
         COALESCE(json_agg(photo.uuid       ORDER BY position), '[]'::json) AS uuids,
         COALESCE(json_agg(photo.extra_exts ORDER BY position), '[]'::json) AS extra_exts,
         COALESCE(json_agg(photo.blurhash   ORDER BY position), '[]'::json) AS blurhashes,
-        COALESCE(json_agg(photo.verified   ORDER BY position), '[]'::json) AS verifications
+        COALESCE(json_agg(photo.verified   ORDER BY position), '[]'::json) AS verifications,
+        COALESCE(json_agg(({PHOTO_GEOMETRY}) ORDER BY position), '[]'::json) AS geometries
     FROM photo
     JOIN prospect
     ON   prospect.id = photo.person_id
@@ -968,6 +970,7 @@ SELECT
         'photo_extra_exts',          (SELECT extra_exts                FROM photos),
         'photo_blurhashes',          (SELECT blurhashes                FROM photos),
         'photo_verifications',       (SELECT verifications             FROM photos),
+        'photo_geometries',          (SELECT geometries                FROM photos),
         'audio_bio_uuid',            (SELECT j                         FROM audio_bio_uuid),
         'name',                      (SELECT name                      FROM prospect),
         'url_slug',                  (SELECT url_slug                  FROM prospect),

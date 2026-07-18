@@ -64,3 +64,25 @@ CREATE INDEX IF NOT EXISTS
     ON person
     USING ivfflat (personality vector_ip_ops)
     WITH (lists = 100);
+
+-- How the square renditions were cut out of `original-{uuid}.jpg`, in that
+-- image's (post-EXIF-rotation) coordinates. Lets clients expand a cropped
+-- preview into the uncropped original. NULL until `service/cron/photocrop`
+-- backfills photos uploaded before these columns existed; `crop_attempted_at`
+-- records that it tried, so photos it can't recover don't get retried forever.
+ALTER TABLE photo
+    ADD COLUMN IF NOT EXISTS width INT,
+    ADD COLUMN IF NOT EXISTS height INT,
+    ADD COLUMN IF NOT EXISTS crop_top INT,
+    ADD COLUMN IF NOT EXISTS crop_left INT,
+    ADD COLUMN IF NOT EXISTS crop_attempted_at TIMESTAMP;
+
+-- The photocrop backfill's queue: tiny, and empties as the backlog drains.
+CREATE INDEX IF NOT EXISTS idx__photo__crop_backlog
+    ON photo(uuid)
+    WHERE width IS NULL AND crop_attempted_at IS NULL;
+
+-- The geometry JSON is now shaped in the application (`commonsql.PHOTO_GEOMETRY`)
+-- rather than by a database function; drop the function this migration used to
+-- create so already-migrated databases shed it too.
+DROP FUNCTION IF EXISTS photo_geometry(photo);

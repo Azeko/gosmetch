@@ -44,7 +44,6 @@ import { api } from '../../api/api';
 import { cmToFeetInchesStr } from '../../units/units';
 import { useSignedInUser } from '../../events/signed-in-user';
 import { postSkipped } from '../../hide-and-block/hide-and-block';
-import { Pinchy } from '../pinchy';
 import { Basic, Basics } from '../basic';
 import { themedSurface, legibleSurface } from '../../app-theme/surface';
 import { Club, Clubs } from '../club';
@@ -83,6 +82,8 @@ import { useOnline } from '../../chat/application-layer/hooks/online';
 import { HeartBackground } from '../heart-background';
 import { AudioPlayer } from '../audio-player';
 import { EnlargeablePhoto } from '../enlargeable-image';
+import type { PhotoGeometry } from '../../util/photos';
+import type { AlbumPhoto } from '../../events/expanded-photo';
 import { commonStyles } from '../../styles';
 import { useSkipped, setSkipped } from '../../hide-and-block/hide-and-block';
 import { OnlineIndicator } from '../online-indicator';
@@ -93,6 +94,14 @@ import { faChildren } from '@fortawesome/free-solid-svg-icons/faChildren'
 import { AboutText } from './about-reply';
 import { useQuote } from '../conversation-screen/quote';
 import { copyProfileLink } from '../../util/util';
+
+// The person's photos in order, so tapping any one lets the gallery page
+// through the rest.
+const buildAlbum = (
+  uuids: string[] | undefined,
+  geometries: (PhotoGeometry | null)[] | undefined,
+): AlbumPhoto[] =>
+  (uuids ?? []).map((uuid, i) => ({ uuid, geometry: geometries?.[i] ?? null }));
 
 type ProspectNavigation = NativeStackNavigationProp<ProspectParamList>;
 type ProspectNavigationRef = MutableRefObject<ProspectNavigation | undefined>;
@@ -129,20 +138,7 @@ const ProspectProfileScreen = () => {
     >
       <Stack.Screen name="Prospect Profile" component={ProspectProfileScreen_} />
       <Stack.Screen name="In-Depth" component={InDepthScreen_} />
-      <Stack.Screen name="Gallery Screen" component={GalleryScreen} />
     </Stack.Navigator>
-  );
-};
-
-const GalleryScreen = ({navigation, route}: NativeStackScreenProps<ProspectParamList, 'Gallery Screen'>) => {
-  const { photoUuid } = route.params;
-
-  return (
-    <>
-      <Pinchy uuid={photoUuid}/>
-      <StatusBarSpacer/>
-      <FloatingBackButton onPress={() => navigation.goBack()}/>
-    </>
   );
 };
 
@@ -757,6 +753,7 @@ type UserData = {
   photo_extra_exts: string[][],
   photo_blurhashes: string[],
   photo_verifications: boolean[],
+  photo_geometries: (PhotoGeometry | null)[],
   audio_bio_uuid: string | null,
   age: number | null,
   location: string | null
@@ -1012,6 +1009,11 @@ const CurriedContent = ({navigationRef, navigation, route}: ProspectScreenProps 
 
   const imageVerifications = data?.photo_verifications;
 
+  const album = useMemo(
+    () => buildAlbum(data?.photo_uuids, data?.photo_geometries),
+    [data?.photo_uuids, data?.photo_geometries],
+  );
+
   const photoUuid0 = (() => {
     if (photoUuids === undefined) {
       return undefined;
@@ -1123,8 +1125,15 @@ const CurriedContent = ({navigationRef, navigation, route}: ProspectScreenProps 
                   photoUuid={photoUuid0}
                   photoExtraExts={photoExtraExts0}
                   photoBlurhash={photoBlurhash0}
+                  photoGeometry={album[0]?.geometry}
+                  album={album}
                   isPrimary={true}
                   isVerified={imageVerification0}
+                  borderRadius={
+                    width > 600 ?
+                    { bottomLeft: 12, bottomRight: 12 } :
+                    undefined
+                  }
                   style={
                     width > 600 ?
                     commonStyles.primaryEnlargeablePhotoBigScreen :
@@ -1380,33 +1389,25 @@ const Body = ({
   const [signedInUser] = useSignedInUser();
   const isOnline = useOnline(personUuid);
 
-  const photoUuid1 = data?.photo_uuids && data?.photo_uuids[1];
-  const photoUuid2 = data?.photo_uuids && data?.photo_uuids[2];
-  const photoUuid3 = data?.photo_uuids && data?.photo_uuids[3];
-  const photoUuid4 = data?.photo_uuids && data?.photo_uuids[4];
-  const photoUuid5 = data?.photo_uuids && data?.photo_uuids[5];
-  const photoUuid6 = data?.photo_uuids && data?.photo_uuids[6];
+  const album = useMemo(
+    () => buildAlbum(data?.photo_uuids, data?.photo_geometries),
+    [data?.photo_uuids, data?.photo_geometries],
+  );
 
-  const photoExtraExts1 = data?.photo_extra_exts && data?.photo_extra_exts[1];
-  const photoExtraExts2 = data?.photo_extra_exts && data?.photo_extra_exts[2];
-  const photoExtraExts3 = data?.photo_extra_exts && data?.photo_extra_exts[3];
-  const photoExtraExts4 = data?.photo_extra_exts && data?.photo_extra_exts[4];
-  const photoExtraExts5 = data?.photo_extra_exts && data?.photo_extra_exts[5];
-  const photoExtraExts6 = data?.photo_extra_exts && data?.photo_extra_exts[6];
-
-  const photoBlurhash1 = data?.photo_blurhashes && data?.photo_blurhashes[1];
-  const photoBlurhash2 = data?.photo_blurhashes && data?.photo_blurhashes[2];
-  const photoBlurhash3 = data?.photo_blurhashes && data?.photo_blurhashes[3];
-  const photoBlurhash4 = data?.photo_blurhashes && data?.photo_blurhashes[4];
-  const photoBlurhash5 = data?.photo_blurhashes && data?.photo_blurhashes[5];
-  const photoBlurhash6 = data?.photo_blurhashes && data?.photo_blurhashes[6];
-
-  const imageVerification1 = data?.photo_verifications && data?.photo_verifications[1] || false;
-  const imageVerification2 = data?.photo_verifications && data?.photo_verifications[2] || false;
-  const imageVerification3 = data?.photo_verifications && data?.photo_verifications[3] || false;
-  const imageVerification4 = data?.photo_verifications && data?.photo_verifications[4] || false;
-  const imageVerification5 = data?.photo_verifications && data?.photo_verifications[5] || false;
-  const imageVerification6 = data?.photo_verifications && data?.photo_verifications[6] || false;
+  const profilePhoto = (position: number) => (
+    <EnlargeablePhoto
+      photoUuid={data?.photo_uuids?.[position]}
+      photoExtraExts={data?.photo_extra_exts?.[position]}
+      photoBlurhash={data?.photo_blurhashes?.[position]}
+      photoGeometry={album[position]?.geometry}
+      album={album}
+      borderRadius={12}
+      style={commonStyles.secondaryEnlargeablePhoto}
+      innerStyle={commonStyles.secondaryEnlargeablePhotoInner}
+      isPrimary={false}
+      isVerified={data?.photo_verifications?.[position] ?? false}
+    />
+  );
 
   // Compare on UUID rather than the numeric `personId` we lift out of `data`,
   // so the "Block" button doesn't briefly render before the API response lands.
@@ -1594,15 +1595,7 @@ const Body = ({
           </DefaultText>
         </>}
 
-        <EnlargeablePhoto
-          photoUuid={photoUuid1}
-          photoExtraExts={photoExtraExts1}
-          photoBlurhash={photoBlurhash1}
-          style={commonStyles.secondaryEnlargeablePhoto}
-          innerStyle={commonStyles.secondaryEnlargeablePhotoInner}
-          isPrimary={false}
-          isVerified={imageVerification1}
-        />
+        {profilePhoto(1)}
 
         {!data?.name &&
           <Title style={{color: data?.theme?.title_color}}>About ...</Title>
@@ -1619,25 +1612,9 @@ const Body = ({
           </>
         }
 
-        <EnlargeablePhoto
-          photoUuid={photoUuid2}
-          photoExtraExts={photoExtraExts2}
-          photoBlurhash={photoBlurhash2}
-          style={commonStyles.secondaryEnlargeablePhoto}
-          innerStyle={commonStyles.secondaryEnlargeablePhotoInner}
-          isPrimary={false}
-          isVerified={imageVerification2}
-        />
+        {profilePhoto(2)}
 
-        <EnlargeablePhoto
-          photoUuid={photoUuid3}
-          photoExtraExts={photoExtraExts3}
-          photoBlurhash={photoBlurhash3}
-          style={commonStyles.secondaryEnlargeablePhoto}
-          innerStyle={commonStyles.secondaryEnlargeablePhotoInner}
-          isPrimary={false}
-          isVerified={imageVerification3}
-        />
+        {profilePhoto(3)}
 
         <AllClubs
           mutualClubs={data?.mutual_clubs ?? []}
@@ -1647,35 +1624,11 @@ const Body = ({
           titleColor={data?.theme?.title_color}
         />
 
-        <EnlargeablePhoto
-          photoUuid={photoUuid4}
-          photoExtraExts={photoExtraExts4}
-          photoBlurhash={photoBlurhash4}
-          style={commonStyles.secondaryEnlargeablePhoto}
-          innerStyle={commonStyles.secondaryEnlargeablePhotoInner}
-          isPrimary={false}
-          isVerified={imageVerification4}
-        />
+        {profilePhoto(4)}
 
-        <EnlargeablePhoto
-          photoUuid={photoUuid5}
-          photoExtraExts={photoExtraExts5}
-          photoBlurhash={photoBlurhash5}
-          style={commonStyles.secondaryEnlargeablePhoto}
-          innerStyle={commonStyles.secondaryEnlargeablePhotoInner}
-          isPrimary={false}
-          isVerified={imageVerification5}
-        />
+        {profilePhoto(5)}
 
-        <EnlargeablePhoto
-          photoUuid={photoUuid6}
-          photoExtraExts={photoExtraExts6}
-          photoBlurhash={photoBlurhash6}
-          style={commonStyles.secondaryEnlargeablePhoto}
-          innerStyle={commonStyles.secondaryEnlargeablePhotoInner}
-          isPrimary={false}
-          isVerified={imageVerification6}
-        />
+        {profilePhoto(6)}
 
         {hasAnyStats(data) && <>
           <Title style={{color: data?.theme?.title_color}}>Stats</Title>
@@ -1770,7 +1723,6 @@ const styles = StyleSheet.create({
 
 export {
   FloatingBackButton,
-  GalleryScreen,
   InDepthScreen,
   ProspectProfileScreen,
 };

@@ -6,6 +6,19 @@ EXISTS (SELECT 1 FROM person WHERE normalized_email = %(normalized_email)s)
 """
 
 
+# How a photo's square renditions were cropped from the original, or NULL when
+# unrecorded (clients read NULL as "don't animate the crop"). The row must be
+# aliased `photo`.
+PHOTO_GEOMETRY = """
+    CASE WHEN photo.width IS NOT NULL THEN json_build_object(
+        'width',     photo.width,
+        'height',    photo.height,
+        'crop_top',  photo.crop_top,
+        'crop_left', photo.crop_left
+    ) END
+"""
+
+
 Q_UPDATE_VERIFICATION_LEVEL_ASSIGN = """
     verification_level_id = CASE
         WHEN EXISTS (
