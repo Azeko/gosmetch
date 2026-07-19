@@ -68,34 +68,60 @@ const constrainPosition = (
   };
 };
 
+// Whether a sideways drag of `translationX` heads toward a photo that exists:
+// the next when dragging left, the previous when dragging right.
+const towardNeighbour = (
+  translationX: number,
+  atIndex: number,
+  count: number,
+): boolean => {
+  'worklet';
+  return translationX < 0 ? atIndex < count - 1 : atIndex > 0;
+};
+
 // The mode a fresh drag locks to once it commits to an axis: sideways pages,
-// up/down dismisses, and when the committed axis's mode isn't available the
-// drag falls through to whichever one is.
+// up/down dismisses. A sideways drag away from the album - past either end, or
+// anywhere in a one-photo gallery - dismisses instead. Straight after a page
+// navigation that dismissal is guarded: the drag still carries the photo,
+// showing it can be pulled away, but snaps back on release rather than
+// completing, so flicking quickly through the album can't fling the whole
+// gallery away on an overshoot. When the committed axis's mode isn't
+// available the drag falls through to whichever one is.
 const lockedDragMode = (
   horizontal: boolean,
-  canPage: boolean,
+  translationX: number,
+  atIndex: number,
+  count: number,
   canDismiss: boolean,
-): 'none' | 'page' | 'dismiss' => {
+  justNavigated: boolean,
+): 'none' | 'page' | 'dismiss' | 'guardedDismiss' => {
   'worklet';
-  if (horizontal && canPage) return 'page';
-  if (!horizontal && canDismiss) return 'dismiss';
-  if (canPage) return 'page';
+  const paging = towardNeighbour(translationX, atIndex, count);
+  if (horizontal && paging) return 'page';
+  if (horizontal && canDismiss && justNavigated) return 'guardedDismiss';
   if (canDismiss) return 'dismiss';
+  if (paging) return 'page';
   return 'none';
 };
 
-// Which neighbour a finished page drag of `translationX` lands on: 1 (next),
-// -1 (previous), or 0 to slide back, clamped at the album's ends.
+// Which neighbour a finished page drag lands on: 1 (next), -1 (previous), or
+// 0 to slide back, clamped at the album's ends. A drag pages by travelling
+// `threshold` px, or by being flicked faster than `flingVelocity` px/s in the
+// direction it travelled - a short sharp flick turns the page too.
 const pageNavDirection = (
   translationX: number,
+  velocityX: number,
   threshold: number,
+  flingVelocity: number,
   atIndex: number,
   count: number,
 ): -1 | 0 | 1 => {
   'worklet';
-  if (translationX <= -threshold && atIndex < count - 1) return 1;
-  if (translationX >= threshold && atIndex > 0) return -1;
-  return 0;
+  const flung = Math.abs(velocityX) >= flingVelocity
+    && velocityX * translationX > 0;
+  if (Math.abs(translationX) < threshold && !flung) return 0;
+  if (!towardNeighbour(translationX, atIndex, count)) return 0;
+  return translationX < 0 ? 1 : -1;
 };
 
 // How far (screen px) a dismiss drag rounds the photo's corners over, and the

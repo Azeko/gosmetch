@@ -1,4 +1,9 @@
-import { dragDismissRadius, focalZoomPosition } from './pinchy-math';
+import {
+  dragDismissRadius,
+  focalZoomPosition,
+  lockedDragMode,
+  pageNavDirection,
+} from './pinchy-math';
 
 // The screen position of an image point, under the model the transform
 // implements: `screen = centre + scale * (imagePoint + position)`, where
@@ -109,5 +114,63 @@ describe('dragDismissRadius', () => {
 
     expect(atRange).toBeCloseTo(wellPast);
     expect(wellPast).toBeLessThanOrEqual(24);
+  });
+});
+
+describe('lockedDragMode', () => {
+  it('pages on a sideways drag toward a neighbour', () => {
+    expect(lockedDragMode(true, -30, 0, 3, true, false)).toBe('page');
+    expect(lockedDragMode(true, 30, 2, 3, true, false)).toBe('page');
+  });
+
+  it('dismisses on an up/down drag', () => {
+    expect(lockedDragMode(false, 0, 1, 3, true, false)).toBe('dismiss');
+  });
+
+  it('dismisses on a sideways drag past the first photo', () => {
+    expect(lockedDragMode(true, 30, 0, 3, true, false)).toBe('dismiss');
+  });
+
+  it('dismisses on a sideways drag past the last photo', () => {
+    expect(lockedDragMode(true, -30, 2, 3, true, false)).toBe('dismiss');
+  });
+
+  it('dismisses on any sideways drag in a one-photo gallery', () => {
+    expect(lockedDragMode(true, 30, 0, 1, true, false)).toBe('dismiss');
+    expect(lockedDragMode(true, -30, 0, 1, true, false)).toBe('dismiss');
+  });
+
+  it('guards a sideways drag past the ends right after paging', () => {
+    expect(lockedDragMode(true, 30, 0, 3, true, true)).toBe('guardedDismiss');
+    expect(lockedDragMode(true, -30, 2, 3, true, true)).toBe('guardedDismiss');
+  });
+
+  it('still dismisses on an up/down drag right after paging', () => {
+    expect(lockedDragMode(false, 0, 0, 3, true, true)).toBe('dismiss');
+  });
+});
+
+describe('pageNavDirection', () => {
+  it('pages on a drag past the distance threshold, however slow', () => {
+    expect(pageNavDirection(-100, 0, 55, 500, 1, 3)).toBe(1);
+    expect(pageNavDirection(100, 0, 55, 500, 1, 3)).toBe(-1);
+  });
+
+  it('pages on a short flick faster than the fling velocity', () => {
+    expect(pageNavDirection(-20, -800, 55, 500, 1, 3)).toBe(1);
+    expect(pageNavDirection(20, 800, 55, 500, 1, 3)).toBe(-1);
+  });
+
+  it('slides back on a short slow drag', () => {
+    expect(pageNavDirection(-20, -100, 55, 500, 1, 3)).toBe(0);
+  });
+
+  it('ignores a fast flick that opposes the drag direction', () => {
+    expect(pageNavDirection(-20, 800, 55, 500, 1, 3)).toBe(0);
+  });
+
+  it('slides back at the album ends even when flung', () => {
+    expect(pageNavDirection(100, 900, 55, 500, 0, 3)).toBe(0);
+    expect(pageNavDirection(-100, -900, 55, 500, 2, 3)).toBe(0);
   });
 });
