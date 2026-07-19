@@ -1,5 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
-import { listen, notify, lastEvent } from './events';
+import { notify, lastEvent, useDerivedEvent } from './events';
 import type { PhotoGeometry, Rect } from '../util/photos';
 
 const EVENT_KEY = 'expanded-photo';
@@ -63,24 +62,13 @@ const getExpandedPhoto = (): ExpandedPhoto | null =>
 
 // Whether the gallery has this preview's photo covered. Such a preview hides
 // itself, so only one instance of the photo is ever apparent.
-const useIsPhotoExpanded = (photoUuid: string | undefined | null): boolean => {
-  const [expandedPhoto, setExpandedPhoto_] = useState<ExpandedPhoto | null>(
-    () => getExpandedPhoto(),
+const useIsPhotoExpanded = (photoUuid: string | undefined | null): boolean =>
+  useDerivedEvent(
+    EVENT_KEY,
+    (e: ExpandedPhoto | null | undefined) =>
+      !!photoUuid && e?.photoUuid === photoUuid && e.covered,
+    [photoUuid],
   );
-
-  useLayoutEffect(() => {
-    return listen<ExpandedPhoto | null>(
-      EVENT_KEY,
-      (e) => setExpandedPhoto_(e ?? null),
-      true,
-    );
-  }, []);
-
-  if (!photoUuid) return false;
-  if (expandedPhoto?.photoUuid !== photoUuid) return false;
-
-  return expandedPhoto.covered;
-};
 
 export {
   ZERO_BORDER_RADII,

@@ -8,7 +8,6 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
 } from 'react';
 import { DefaultText } from './default-text';
 import { DuoliciousTopNavBar } from './top-nav-bar';
@@ -33,7 +32,7 @@ import {
 } from '../api/answer';
 import { DefaultFlatList, DefaultFlashList } from './default-flat-list';
 import { z } from 'zod';
-import { notify, listen, lastEvent } from '../events/events';
+import { notify, lastEvent, useDerivedEvent } from '../events/events';
 import { consumeStaleFeed } from '../events/stale-feed';
 import { Club } from './club';
 import { ClubItem, joinClub, leaveClub } from '../club/club';
@@ -561,14 +560,13 @@ const isClubMember = (clubName: string) =>
   (lastEvent<ClubItem[]>('updated-clubs') ?? [])
     .some((c) => c.name === clubName);
 
-const useIsClubMember = (clubName: string) => {
-  const subscribe = useCallback(
-    (onChange: () => void) => listen('updated-clubs', onChange),
-    [],
+const useIsClubMember = (clubName: string) =>
+  useDerivedEvent(
+    'updated-clubs',
+    (clubs: ClubItem[] | undefined) =>
+      (clubs ?? []).some((c) => c.name === clubName),
+    [clubName],
   );
-
-  return useSyncExternalStore(subscribe, () => isClubMember(clubName));
-};
 
 // Facepile geometry. Named because the width math in QuestionFacepiles
 // depends on these, so it can't silently disagree with the styles.
@@ -1375,11 +1373,7 @@ const FeedItemAddedPhoto = ({
             photoGeometry={fields.added_photo_geometry}
             isPrimary={true}
             borderRadius={12}
-            style={{
-              ...commonStyles.secondaryEnlargeablePhoto,
-              marginTop: 0,
-              marginBottom: 0,
-            }}
+            style={styles.addedPhoto}
           />
         </View>
       </Animated.View>
@@ -1646,6 +1640,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     padding: 10,
+  },
+  addedPhoto: {
+    ...commonStyles.secondaryEnlargeablePhoto,
+    marginTop: 0,
+    marginBottom: 0,
   },
   pressableStyle: {
     marginBottom: 20,

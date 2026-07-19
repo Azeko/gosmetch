@@ -108,6 +108,8 @@ const buildAlbum = (
     geometry: geometries?.[i] ?? null,
   }));
 
+const primaryPhotoBigScreenRadii = { bottomLeft: 12, bottomRight: 12 };
+
 type ProspectNavigation = NativeStackNavigationProp<ProspectParamList>;
 type ProspectNavigationRef = MutableRefObject<ProspectNavigation | undefined>;
 
@@ -1107,7 +1109,7 @@ const CurriedContent = ({navigationRef, navigation, route}: ProspectScreenProps 
                   isVerified={imageVerification0}
                   borderRadius={
                     width > 600 ?
-                    { bottomLeft: 12, bottomRight: 12 } :
+                    primaryPhotoBigScreenRadii :
                     undefined
                   }
                   style={
