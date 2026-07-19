@@ -13,8 +13,16 @@ type BorderRadii = {
   bottomRight: number
 };
 
+const ZERO_BORDER_RADII: BorderRadii = {
+  topLeft: 0,
+  topRight: 0,
+  bottomLeft: 0,
+  bottomRight: 0,
+};
+
 type AlbumPhoto = {
   uuid: string
+  extraExts: string[]
   geometry: PhotoGeometry | null
 };
 
@@ -75,6 +83,7 @@ const useIsPhotoExpanded = (photoUuid: string | undefined | null): boolean => {
 };
 
 export {
+  ZERO_BORDER_RADII,
   getExpandedPhoto,
   setExpandedPhoto,
   useIsPhotoExpanded,

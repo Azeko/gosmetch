@@ -26,7 +26,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import type { SharedValue } from 'react-native-reanimated';
-import { IMAGES_URL } from '../env/env';
+import { FillImage } from './fill-image';
+import { hasGifExtraExt, photoUri } from '../util/photos';
 import {
   constrainPosition,
   dragDismissRadius,
@@ -71,12 +72,14 @@ const fitWithin = (
 
 const FitWithinScreenImage = ({
   source,
+  isGif,
   animatedStyle,
   onUpdateImageSize,
   naturalSize,
   viewport,
 }: {
   source: { uri: string };
+  isGif: boolean;
   animatedStyle: AnimatedStyle<ImageStyle>;
   onUpdateImageSize: (size: { imageWidth: number, imageHeight: number }) => void;
   naturalSize?: { width: number, height: number };
@@ -131,6 +134,19 @@ const FitWithinScreenImage = ({
     viewportHeight
   ]);
 
+  if (imageWidth && imageHeight && isGif) {
+    return (
+      <Animated.View
+        style={[
+          animatedStyle,
+          { width: imageWidth, height: imageHeight, overflow: 'hidden' },
+        ]}
+      >
+        <FillImage uri={source.uri} />
+      </Animated.View>
+    );
+  }
+
   if (imageWidth && imageHeight) {
     return (
       <Animated.Image
@@ -171,8 +187,9 @@ type PinchyPage = {
   count: number
 };
 
-const Pinchy = ({uuid, naturalSize, viewport, zoom, dismiss, onDismiss, page, onNavigate, onTapEdge, backgroundColor = 'black'}: {
+const Pinchy = ({uuid, extraExts, naturalSize, viewport, zoom, dismiss, onDismiss, page, onNavigate, onTapEdge, backgroundColor = 'black'}: {
   uuid: string,
+  extraExts: string[],
   naturalSize?: { width: number, height: number },
   // The box to fit the photo within and centre it in.
   viewport: { width: number, height: number },
@@ -478,7 +495,8 @@ const Pinchy = ({uuid, naturalSize, viewport, zoom, dismiss, onDismiss, page, on
     <GestureDetector gesture={composed}>
       <View style={[styles.container, { backgroundColor }]}>
         <FitWithinScreenImage
-          source={{ uri: `${IMAGES_URL}/original-${uuid}.jpg` }}
+          source={{ uri: photoUri(uuid, 'original', extraExts) }}
+          isGif={hasGifExtraExt(extraExts)}
           animatedStyle={animatedStyle}
           onUpdateImageSize={onUpdateImageSize}
           naturalSize={naturalSize}
