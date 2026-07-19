@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   ImageStyle,
   Pressable,
   StyleProp,
@@ -18,12 +19,14 @@ const AutoResizingGif = ({
   style,
   requirePress = false,
   priority,
+  activityIndicator = 'logo',
 }: {
   uri: string
   onError?: () => void
   style?: StyleProp<ImageStyle>,
   requirePress?: boolean
   priority?: null | 'low' | 'normal' | 'high'
+  activityIndicator?: 'logo' | 'default'
 }) => {
   const [shouldLoad, setShouldLoad] = useState(!requirePress);
 
@@ -78,8 +81,11 @@ const AutoResizingGif = ({
             }
           </View>
         }
-        {!requirePress &&
+        {!requirePress && activityIndicator === 'logo' &&
           <LogoActivityIndicator size="large" color="white" />
+        }
+        {!requirePress && activityIndicator === 'default' &&
+          <ActivityIndicator size="large" color="white" />
         }
         <DefaultText
           style={{
