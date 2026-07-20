@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AppStoreBadges } from '../../badges/app-store/app-store';
 const twitterIcon = require('../../../assets/social/twitter-white.svg');
 const redditIcon = require('../../../assets/social/reddit-white.svg');
@@ -39,6 +40,50 @@ const SocialBadges = () => {
   );
 };
 
+const LegalLinks = () => {
+  const [hoveredHref, setHoveredHref] = useState<string | null>(null);
+
+  return (
+    <ul
+      style={{
+        boxSizing: 'border-box',
+        flexWrap: 'wrap',
+        listStyleType: 'none',
+        width: '100%',
+        justifyContent: 'center',
+        display: 'flex',
+        gap: '12px',
+        border: 'none',
+        padding: '0',
+        margin: '0',
+      }}
+    >
+      {[
+        ['Guidelines', 'https://duolicious.app/guidelines/'],
+        ['Terms', 'https://duolicious.app/terms/'],
+        ['Privacy', 'https://duolicious.app/privacy/'],
+      ].map(([label, href]) =>
+        <li key={href}>
+          <a
+            target="_blank"
+            href={href}
+            onMouseEnter={() => setHoveredHref(href)}
+            onMouseLeave={() => setHoveredHref(null)}
+            style={{
+              color: 'white',
+              fontFamily: 'MontserratSemiBold',
+              fontSize: '15px',
+              textDecoration: hoveredHref === href ? 'underline' : 'none',
+            }}
+          >
+            {label}
+          </a>
+        </li>
+      )}
+    </ul>
+  );
+};
+
 const WebBarFooter = () => {
   return (
     <div
@@ -54,6 +99,7 @@ const WebBarFooter = () => {
     >
       <AppStoreBadges/>
       <SocialBadges/>
+      <LegalLinks/>
     </div>
   );
 };
