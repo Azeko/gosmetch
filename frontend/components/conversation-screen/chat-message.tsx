@@ -10,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import { DefaultText } from '../default-text';
-import { longFriendlyTimestamp } from '../../util/util';
 import { Image } from 'expo-image';
 import { IMAGES_URL } from '../../env/env';
 import { AutoResizingGif } from '../auto-resizing-gif';
@@ -63,6 +62,8 @@ import { notify } from '../../events/events';
 import {
   ShowEmojiPickerEvent,
 } from '../modal/emoji-picker-modal';
+import { MessageReceipt } from './message-receipt';
+import { deliveredText } from './message-receipt-logic';
 
 const currentUserBackgroundColor = '#70f';
 
@@ -316,11 +317,13 @@ const ChatMessage = ({
   personUuid,
   name,
   avatarUuid,
+  isLastMessage,
 }: {
   messageId: string
   personUuid: string
   name: string | undefined
   avatarUuid: string | null | undefined
+  isLastMessage: boolean
 }) => {
   const { appTheme } = useAppTheme();
   const opacity = useSharedValue(0);
@@ -329,9 +332,10 @@ const ChatMessage = ({
   const dragTriggered = useSharedValue(false);
 
   const [isHovering, setIsHovering] = useState(false);
-  const [doShowTimestamp, setDoShowTimestamp] = useState(false);
+  const [isTimestampShown, setIsTimestampShown] = useState(false);
   const [showReactionBar, setShowReactionBar] = useState(false);
   const [speechBubbleImageError, setSpeechBubbleImageError] = useState(false);
+  const [isGifLoaded, setIsGifLoaded] = useState(false);
   const {
     anchor: reactionAnchor,
     anchorRef: reactionAnchorRef,
@@ -344,6 +348,25 @@ const ChatMessage = ({
     message && message.message.type !== 'typing'
       ? message.message
       : undefined;
+
+  const isDelivered = message?.status === 'sent';
+
+  const hasReceipt =
+    isLastMessage &&
+    !!chatMessage?.fromCurrentUser &&
+    (isDelivered || message?.status === 'sending');
+
+  const deliveredAt =
+    hasReceipt && isDelivered && chatMessage ? chatMessage.timestamp : null;
+
+  const [hadReceipt, setHadReceipt] = useState(hasReceipt);
+
+  // Gaining or losing the slot makes a press about it stale, so it's dropped
+  // rather than carried over to whatever the bubble shows next.
+  if (hasReceipt !== hadReceipt) {
+    setHadReceipt(hasReceipt);
+    setIsTimestampShown(false);
+  }
 
   const mamId = chatMessage?.mamId;
 
@@ -451,10 +474,14 @@ const ChatMessage = ({
     ? 'white'
     : appTheme.speechBubbleOtherUserColor;
 
-  const showTimestamp = useCallback(() => {
+  const toggleTimestamp = useCallback(() => {
+    if (window.getSelection?.()?.toString()) {
+      return;
+    }
+
     setShowReactionBar(false);
-    setDoShowTimestamp(t => !t);
-  }, [setDoShowTimestamp]);
+    setIsTimestampShown(t => !t);
+  }, [setIsTimestampShown]);
 
   const setQuoteToThisSpeechBubble = useCallback(() => {
     if (!message) {
@@ -478,14 +505,16 @@ const ChatMessage = ({
     }
   }, [message, signedInUser?.name, name])
 
+  const isTextBubble = !!message && message.message.type === 'chat-text';
+
+  const canPan = isMobile() && !doRenderUrlAsImage && isTextBubble;
+
+  const canTap = isTextBubble && (!doRenderUrlAsImage || isGifLoaded);
+
+  const canLongPress = isMobile() && canReact;
+
   const pan = Gesture
     .Pan()
-    .enabled(
-      isMobile() &&
-      !doRenderUrlAsImage &&
-      !!message &&
-      message.message.type === 'chat-text'
-    )
     .activeOffsetX([-10, 10])
     .onStart(() => {
       dragTriggered.value = false;
@@ -508,28 +537,26 @@ const ChatMessage = ({
   const tap = Gesture
     .Tap()
     .maxDistance(10)
-    .enabled(
-      !doRenderUrlAsImage &&
-      !!message &&
-      message.message.type === 'chat-text'
-    )
+    .enabled(canTap)
     .onEnd(() => {
-      runOnJS(showTimestamp)()
+      runOnJS(toggleTimestamp)()
     });
 
   const longPress = Gesture
     .LongPress()
-    .enabled(isMobile() && canReact)
     .minDuration(300)
     .onStart(() => {
       runOnJS(openReactionBar)()
     });
 
-  // RNGH's web orchestrator never reports failure for a disabled handler, so
-  // a disabled longPress in the composition blocks pan and tap forever
-  const gesture = canReact
-    ? Gesture.Exclusive(longPress, pan, tap)
-    : Gesture.Exclusive(pan, tap);
+  // RNGH's web orchestrator never reports failure for a disabled handler, so a
+  // disabled handler blocks every handler after it in the composition. Only
+  // live handlers go in, and `tap` goes last so nothing can block it.
+  const gesture = Gesture.Exclusive(
+    ...(canLongPress ? [longPress] : []),
+    ...(canPan ? [pan] : []),
+    tap,
+  );
 
   const gestureStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -664,19 +691,13 @@ const ChatMessage = ({
                   setIsHovering(true);
                 }}
                 onMouseLeave={() => setIsHovering(false)}
-                /* @ts-ignore */
-                onClick={isMobile() ? undefined : () => {
-                  if (window.getSelection()?.toString()) {
-                    return;
-                  }
-                  showTimestamp();
-                }}
               >
                 {doRenderUrlAsImage &&
                   <AutoResizingGif
                     uri={message.message.text}
                     onError={() => setSpeechBubbleImageError(true)}
                     requirePress={isMobile()}
+                    onLoadedChange={setIsGifLoaded}
                   />
                 }
                 {!doRenderUrlAsImage &&
@@ -725,6 +746,7 @@ const ChatMessage = ({
                 sending={message.status === 'sending'}
                 uuid={message.message.audioUuid}
                 presentation="conversation"
+                onPressBody={toggleTimestamp}
               />
             }
           </Animated.View>
@@ -743,7 +765,15 @@ const ChatMessage = ({
           }}
         />
       }
-      {doShowTimestamp &&
+      {hasReceipt &&
+        <MessageReceipt
+          personUuid={personUuid}
+          deliveredAt={deliveredAt}
+          hasGold={!!signedInUser?.hasGold}
+          pressToggle={isTimestampShown}
+        />
+      }
+      {!hasReceipt && isTimestampShown && isDelivered &&
         <DefaultText
           selectable={true}
           style={{
@@ -752,7 +782,7 @@ const ChatMessage = ({
             color: appTheme.hintColor,
           }}
         >
-          Delivered {longFriendlyTimestamp(message.message.timestamp)}
+          {deliveredText(message.message.timestamp)}
         </DefaultText>
       }
       <MessageStatusComponent
