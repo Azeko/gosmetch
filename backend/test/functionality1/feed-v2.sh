@@ -161,6 +161,15 @@ test_json_format () {
   q "update search_preference_age set min_age = 30, max_age = 40
      where person_id = (select id from person where name = 'user13')"
 
+  q "update person
+     set show_my_location_id = (
+       select id from yes_country_only_no where name = 'Country only')
+     where name = 'user1'"
+  q "update person
+     set show_my_location_id = (
+       select id from yes_country_only_no where name = 'No')
+     where name = 'user2'"
+
   # The feed is ordered by came_online_time, so make the ordering
   # deterministic: user1's online session started most recently. Setting
   # last_online_time in the reverse order proves the feed orders by
@@ -210,7 +219,7 @@ test_json_format () {
     ],
     "gender": "Other",
     "is_verified": false,
-    "location": "New York, New York, United States",
+    "location": "United States",
     "match_percentage": 50,
     "name": "user1",
     "came_online_time": "redacted_nonnull_value",
@@ -233,7 +242,7 @@ test_json_format () {
     ],
     "gender": "Other",
     "is_verified": false,
-    "location": "New York, New York, United States",
+    "location": null,
     "match_percentage": 50,
     "name": "user2",
     "came_online_time": "redacted_nonnull_value",

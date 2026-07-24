@@ -425,6 +425,12 @@ const yesNo = [
   'No',
 ];
 
+const yesCountryOnlyNo = [
+  'Yes',
+  'Country only',
+  'No',
+];
+
 const yesNoMaybe = [
   'Yes',
   'No',
@@ -2303,16 +2309,16 @@ const privacySettingsOptionGroups: OptionGroup<OptionGroupInputs>[] = [
 
       return (
         <DefaultText style={descriptionStyle.style}>
-          Would you like your location to appear on your profile? Note that if
-          you set this option to ‘No’, other people will still be able to filter
-          your profile by distance when searching.
+          Choose how your location appears on your profile. ‘Country only’
+          hides your city. Other people can still filter your profile by
+          distance when searching.
           {!signedInUser?.hasGold && ' Unlock this feature with Gold.'}
         </DefaultText>
       )
     },
     input: {
       buttons: {
-        values: yesNo,
+        values: yesCountryOnlyNo,
         submit: async (showMyLocation: string) => {
           const { hasGold = false } = getSignedInUser() ?? {};
           if (!hasGold) {
