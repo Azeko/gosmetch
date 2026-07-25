@@ -151,23 +151,46 @@ async def _redis_unsubscribe_online(
     await pubsub.unsubscribe(key)
     await pubsub.unsubscribe(answers_channel(username))
 
-async def redis_publish_online(
+async def _redis_publish_status(
     redis_client: redis.Redis,
     username: str,
-    online: bool
+    status: OnlineStatus,
 ) -> None:
-    status = (
-        OnlineStatus.ONLINE.value
-        if online
-        else OnlineStatus.ONLINE_RECENTLY.value)
-
     key = FMT_KEY.format(username=username)
-    val = to_bus(OnlineEvent(username=username, status=status))
+    val = to_bus(OnlineEvent(username=username, status=status.value))
 
     async with redis_client.pipeline(transaction=True) as pipe:
         pipe.publish(key, val)
         pipe.set(key, val, ex=ONLINE_RECENTLY_SECONDS)
         await pipe.execute()
+
+
+def _presence_status(hidden: bool, online: bool) -> OnlineStatus:
+    if hidden:
+        return OnlineStatus.OFFLINE
+    if online:
+        return OnlineStatus.ONLINE
+    return OnlineStatus.ONLINE_RECENTLY
+
+
+async def redis_publish_online(
+    redis_client: redis.Redis,
+    username: str,
+    *,
+    online: bool | None = None,
+    visible: bool | None = None,
+) -> None:
+    if visible is None:
+        to_id = await fetch_id_from_username(username)
+        hidden = to_id is not None and await fetch_hides_online_status(to_id)
+    else:
+        hidden = not visible
+
+    if online is None:
+        online = await redis_has_subscribers(redis_client, username)
+
+    await _redis_publish_status(
+        redis_client, username, _presence_status(hidden=hidden, online=online))
 
 async def should_subscribe(from_username: str | None, to_username: str) -> bool:
     if from_username is None:
