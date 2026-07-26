@@ -16,7 +16,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Polygon, Polyline } from 'react-native-svg';
-import { safeBestTextOn } from '../util/util';
+import { safeBestTextOn } from '../../util/util';
 
 // The floating, bobbing speech bubble shared by the app's one-time hints
 // (`AboutReplyHint`, `InboxFilterHint`). Purely presentational: each hint owns
@@ -98,8 +98,8 @@ const HintBubble = ({
       <View
         style={{
           ...(pointerPosition === 'left'
-            ? { marginLeft: 16 }
-            : { marginRight: 16 }),
+            ? { marginLeft: 8 }
+            : { marginRight: 8 }),
           marginBottom: -3,
           zIndex: 2,
         }}
