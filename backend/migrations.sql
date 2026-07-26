@@ -61,3 +61,19 @@ BEGIN
         EXIT WHEN inserted = 0;
     END LOOP;
 END $$;
+
+-- Everyone's visitor clock starts at the moment the column is added, so the
+-- visits already in the table aren't all treated as unannounced. The default
+-- then reverts to zero, so a person created later is notified about their
+-- first visitor.
+ALTER TABLE person
+    ADD COLUMN IF NOT EXISTS visitors_notification SMALLINT
+        REFERENCES immediacy(id) NOT NULL DEFAULT 4,
+    ADD COLUMN IF NOT EXISTS visitor_seconds INT NOT NULL
+        DEFAULT EXTRACT(EPOCH FROM NOW())::int;
+
+ALTER TABLE person ALTER COLUMN visitor_seconds SET DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx__visited__updated_at__object__subject
+    ON visited(updated_at DESC, object_person_id, subject_person_id)
+    WHERE NOT invisible;

@@ -1,7 +1,8 @@
 # Notifications
 
-When a user has an unread intro or chat, Duolicious notifies them — by push
-notification to their phone, or by email as a fallback.
+When a user has an unread intro or chat, or somebody has visited their profile,
+Duolicious notifies them — by push notification to their phone, or by email as a
+fallback.
 
 ## When a user is notified
 
@@ -17,10 +18,30 @@ Otherwise, the user is notified once **all** of these hold:
 - they haven't already been notified about it, and
 - the message is less than 10 days old.
 
-Each user also chooses, separately for intros and chats, how often they're
-willing to be notified: immediately, daily, every 3 days, weekly, or never. A
-notification only goes out once that much time has elapsed since the last one for
-that type — and "never" means none at all.
+Each user also chooses, separately for intros, chats and visitors, how often
+they're willing to be notified: immediately, daily, every 3 days, weekly, or
+never. A notification only goes out once that much time has elapsed since the
+last one for that type — and "never" means none at all.
+
+## Visitors
+
+Visits are notified about under exactly the rules above, reading the newest
+visit a person received in place of the newest message they were sent. Two kinds
+of visit are skipped, because neither one appears in the visitors tab and a
+notification the user can't act on is worse than none: visits made while
+browsing invisibly, and visits by somebody deactivated or shadow banned.
+
+Visitors default to **weekly**, which is deliberately the quietest default of
+the three: a profile can be visited far more often than it's messaged. There is
+no immediate path for visits either — even "immediately" waits for the periodic
+check below, so a visit is never pushed while the visitor is still reading.
+
+Visits are never folded into a message notification. Somebody who was visited
+and then messaged gets **two** notifications: one headed "you have a new
+message", which opens the inbox, and one headed "someone visited your profile",
+which opens the visitors tab. Neither has to share a headline or a destination
+with the other, and each is governed by its own frequency setting, so silencing
+one leaves the other alone.
 
 ## Web push (online users only)
 
@@ -88,9 +109,9 @@ A device that has been signed out is never pushed to.
 ## Immediate vs. delayed
 
 Immediate notifications are pushed the instant a qualifying message arrives.
-Everything else — every other frequency, the email fallback, and anyone an
-immediate push couldn't reach — is handled by a periodic check that applies all
-the rules above.
+Everything else — every other frequency, every visitor notification, the email
+fallback, and anyone an immediate push couldn't reach — is handled by a periodic
+check that applies all the rules above.
 
 ## The app-icon badge
 
@@ -103,7 +124,8 @@ into every push as an absolute badge value, so all of a user's devices
 converge on the same number:
 
 - A push sent while the user has **no connected chat clients** increments the
-  count once per user (not per device) and carries it as the badge. This holds
+  count once per notification (not per device) and carries it as the badge, so a
+  user due both a message and a visitor notification counts twice. This holds
   for every push the server sends — live chat messages and the periodic check
   alike.
 - A push sent while **any client is connected** carries no badge — the user
