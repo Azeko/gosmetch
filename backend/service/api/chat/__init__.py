@@ -1,32 +1,23 @@
 import dataclasses
-from functools import partial
-from database import (
-    api_tx,
-    row_str,
-    row_str_or_none,
-)
+from database import api_tx
 import asyncio
 import duohash
 import regex
 import traceback
 import sys
 from websockets.exceptions import ConnectionClosedError
-import notify
-import webpushsender
 from async_lru_cache import AsyncLruCache
-from unseennotificationcount import increment_unseen_notification_count
 import random
-from collections.abc import Mapping
 from datetime import datetime, timezone
 from service.api.chat.robot9000 import Q_SELECT_INTRO_HASH, upsert_intro_hash
 from service.api.chat.mayberegister import register_push_token
-from service.api.chat.maybewebpush import (
-    clear_web_push_subscription,
-    fetch_web_push_subscriptions,
-    register_web_push_subscription,
+from service.api.chat.maybewebpush import register_web_push_subscription
+from service.api.chat.notifications import (
+    fetch_immediate_data,
+    send_notifications,
+    send_reaction_notifications,
 )
 from service.api.chat.spam import is_spam_message
-from service.api.chat.upsertlastnotification import upsert_last_notification
 from service.api.chat.messagestorage.inbox import (
     get_inbox,
     get_inbox_entry,
@@ -63,6 +54,7 @@ from service.api.chat.chatutil import (
     fetch_is_shadow_banned,
     fetch_has_gold,
     format_timestamp,
+    is_online,
     now_microseconds,
     fetch_id_from_username,
     redis_has_subscribers,
@@ -124,10 +116,6 @@ from service.api.chat.audiomessage import (
 import redis.asyncio as redis
 from fastapi import WebSocket, WebSocketDisconnect
 import json
-from constants import (
-    MAX_NOTIFICATION_LENGTH,
-)
-from util import truncate_text, Json
 from service.api.chat.verification import (
     verification_required,
 )
@@ -153,80 +141,6 @@ WHERE
 AND
     sign_up_time < now() - (interval '1 day') / power(verification_level_id, 2)
 """
-
-_Q_SENDER_CARD = """
-{prefix}SELECT
-    person.id AS person_id,
-    person.uuid::TEXT AS person_uuid,
-    person.name AS name,
-    photo.uuid AS photo_uuid,
-    photo.blurhash AS photo_blurhash
-FROM
-    person
-LEFT JOIN
-    photo
-ON
-    photo.person_id = person.id
-WHERE
-    person.id = %(from_id)s{gate}
-ORDER BY
-    photo.position
-LIMIT 1
-"""
-
-Q_IMMEDIATE_DATA = _Q_SENDER_CARD.format(
-    prefix="""WITH to_notification AS (
-    SELECT
-        1
-    FROM
-        person
-    WHERE
-        id = %(to_id)s
-    AND
-        [[type]]_notification = 1 -- Immediate notification ID
-)
-""",
-    gate="""
-AND
-    EXISTS (SELECT 1 FROM to_notification)""")
-
-Q_IMMEDIATE_INTRO_DATA = Q_IMMEDIATE_DATA.replace('[[type]]', 'intros')
-
-Q_IMMEDIATE_CHAT_DATA = Q_IMMEDIATE_DATA.replace('[[type]]', 'chats')
-
-Q_SELECT_PUSH_TOKENS = """
-WITH session_summary AS (
-    SELECT
-        ARRAY_AGG(DISTINCT duo_session.push_token)
-            FILTER (WHERE duo_session.push_token IS NOT NULL) AS push_tokens,
-        MAX(duo_session.last_online_time)
-            FILTER (WHERE duo_session.push_token IS NULL) AS web_last_online,
-        MAX(duo_session.last_online_time)
-            FILTER (WHERE duo_session.push_token IS NOT NULL) AS mobile_last_online
-    FROM
-        duo_session
-    JOIN
-        person
-    ON
-        person.id = duo_session.person_id
-    WHERE
-        person.uuid = uuid_or_null(%(username)s)
-    AND
-        duo_session.signed_in
-)
-SELECT
-    unnest(push_tokens) AS token
-FROM
-    session_summary
-WHERE
-    -- A web session being strictly more recent means we defer the whole
-    -- notification to the cron, which pushes *and* emails. Pushing here would
-    -- upsert the last-notification time and suppress that email. Ties favour
-    -- mobile, matching the cron's web-vs-mobile comparison.
-    NOT COALESCE(web_last_online > mobile_last_online, FALSE)
-"""
-
-Q_WEB_PUSH_DATA = _Q_SENDER_CARD.format(prefix='', gate='')
 
 MAX_MESSAGE_LEN = 5000
 
@@ -259,89 +173,6 @@ async def redis_forward_to_websocket(
         raise
     except:
         print(traceback.format_exc())
-
-
-async def _is_online(username: str, has_subscribers: bool | None) -> bool:
-    if has_subscribers is not None:
-        return has_subscribers
-
-    return await redis_has_subscribers(REDIS_WORKER_CLIENT, username)
-
-
-async def send_notification(
-    from_name: str | None,
-    to_username: str | None,
-    message: str | None,
-    is_intro: bool,
-    data: object,
-    title: str | None = None,
-    has_subscribers: bool | None = None,
-) -> None:
-    if from_name is None:
-        return None
-
-    if to_username is None:
-        return
-
-    if message is None:
-        return
-
-    if data is None:
-        return
-
-    to_tokens = await fetch_push_tokens(username=to_username)
-
-    # No device is reachable by push notification. Leave the last-notification
-    # time untouched so the cron job falls back to emailing the user.
-    if not to_tokens:
-        return
-
-    truncated_message = truncate_text(message, MAX_NOTIFICATION_LENGTH)
-
-    online = await _is_online(to_username, has_subscribers)
-
-    # The app-icon badge counts pushes sent while the user had no connected
-    # clients. With a client open, the user can see the message themselves, so
-    # the counter is left alone and the badge omitted, which leaves each
-    # device's badge untouched.
-    badge = (
-        None
-        if online
-        else await increment_unseen_notification_count(username=to_username))
-
-    for to_token in to_tokens:
-        notify.enqueue_mobile_notification(
-            token=to_token,
-            title=title if title is not None else _default_notification_title(from_name),
-            body=truncated_message,
-            data=data,
-            badge=badge,
-        )
-
-    upsert_last_notification(username=to_username, is_intro=is_intro)
-
-
-def _default_notification_title(from_name: str) -> str:
-    return f"{from_name} sent you a message"
-
-
-def _reaction_notification_title(from_name: str, emoji: str) -> str:
-    return f"{from_name} reacted {emoji} to your message"
-
-
-def _conversation_screen_data(
-    immediate_data: Mapping[str, Json],
-) -> Json:
-    return {
-        'screen': 'Conversation Screen',
-        'params': {
-            'personId': immediate_data['person_id'],
-            'personUuid': immediate_data['person_uuid'],
-            'name': immediate_data['name'],
-            'photoUuid': immediate_data['photo_uuid'],
-            'photoBlurhash': immediate_data['photo_blurhash'],
-        },
-    }
 
 
 def normalize_message(message_str: str) -> str:
@@ -433,87 +264,6 @@ async def fetch_is_trusted_account(from_id: int) -> bool:
 
     return bool(row)
 
-@AsyncLruCache(ttl=2 * 60)  # 2 minutes
-async def fetch_push_tokens(username: str) -> list[str]:
-    async with api_tx('read committed') as tx:
-        await tx.execute(Q_SELECT_PUSH_TOKENS, dict(username=username))
-        rows = await tx.fetchall()
-
-    return list({row_str(row, 'token') for row in rows})
-
-@AsyncLruCache(ttl=10)  # 10 seconds
-async def fetch_immediate_data(
-    from_id: int,
-    to_id: int,
-    is_intro: bool,
-) -> Mapping[str, Json] | None:
-    q = Q_IMMEDIATE_INTRO_DATA if is_intro else Q_IMMEDIATE_CHAT_DATA
-
-    async with api_tx('read committed') as tx:
-        await tx.execute(q, dict(from_id=from_id, to_id=to_id))
-        row = await tx.fetchone()
-
-    return row if row else None
-
-
-@AsyncLruCache(ttl=10)  # 10 seconds
-async def fetch_web_push_data(from_id: int) -> Mapping[str, Json] | None:
-    async with api_tx('read committed') as tx:
-        await tx.execute(Q_WEB_PUSH_DATA, dict(from_id=from_id))
-        row = await tx.fetchone()
-
-    return row if row else None
-
-
-async def send_web_push_notification(
-    from_id: int,
-    to_username: str | None,
-    message: str | None,
-    immediate_data: Mapping[str, Json] | None,
-    emoji: str | None = None,
-    has_subscribers: bool | None = None,
-) -> None:
-    if to_username is None:
-        return
-
-    if message is None:
-        return
-
-    if not await _is_online(to_username, has_subscribers):
-        return
-
-    subscriptions = await fetch_web_push_subscriptions(username=to_username)
-    if not subscriptions:
-        return
-
-    data = (
-        immediate_data
-        if immediate_data is not None
-        else await fetch_web_push_data(from_id=from_id))
-    if data is None:
-        return
-
-    from_name = row_str_or_none(data, 'name')
-    if from_name is None:
-        return
-
-    title = (
-        _reaction_notification_title(from_name, emoji)
-        if emoji is not None
-        else _default_notification_title(from_name))
-    body = truncate_text(message, MAX_NOTIFICATION_LENGTH)
-    routing = _conversation_screen_data(data)
-
-    for session_token_hash, subscription in subscriptions:
-        webpushsender.enqueue_web_push(
-            subscription=subscription,
-            title=title,
-            body=body,
-            data=routing,
-            on_gone=partial(clear_web_push_subscription, session_token_hash),
-        )
-
-
 async def _chat_interaction_blocked(
     from_id: int,
     to_id: int,
@@ -540,7 +290,7 @@ async def _publish_inbox_entry(
     has_subscribers: bool | None = None,
 ) -> None:
     # An offline viewer gets the whole inbox via `duo_query_inbox` on reconnect.
-    if not await _is_online(viewer_username, has_subscribers):
+    if not await is_online(viewer_username, has_subscribers):
         return
 
     await redis_publish_many(
@@ -548,46 +298,6 @@ async def _publish_inbox_entry(
         await get_inbox_entry(
             viewer_username=viewer_username,
             prospect_username=prospect_username))
-
-
-async def _send_reaction_notification(
-    from_id: int,
-    partner_id: int,
-    partner_username: str,
-    emoji: str,
-    target_body: str,
-    has_subscribers: bool | None = None,
-) -> None:
-    immediate_data = await fetch_immediate_data(
-        from_id=from_id,
-        to_id=partner_id,
-        is_intro=False)
-
-    await send_web_push_notification(
-        from_id=from_id,
-        to_username=partner_username,
-        message=target_body,
-        immediate_data=immediate_data,
-        emoji=emoji,
-        has_subscribers=has_subscribers,
-    )
-
-    if immediate_data is None:
-        return
-
-    from_name = row_str_or_none(immediate_data, 'name')
-    if from_name is None:
-        return
-
-    await send_notification(
-        from_name=from_name,
-        to_username=partner_username,
-        message=target_body,
-        is_intro=False,
-        title=_reaction_notification_title(from_name, emoji),
-        data=_conversation_screen_data(immediate_data),
-        has_subscribers=has_subscribers,
-    )
 
 
 async def _handle_reaction(
@@ -671,7 +381,7 @@ async def _handle_reaction(
         ])
 
     if deliver_to_partner and stored.is_new_visible_reaction:
-        await _send_reaction_notification(
+        await send_reaction_notifications(
             from_id=from_id,
             partner_id=partner_id,
             partner_username=partner_username,
@@ -947,16 +657,6 @@ async def process_text(
             if is_shadow_banned
             else await redis_has_subscribers(REDIS_WORKER_CLIENT, to_username))
 
-        if immediate_data is not None and not is_shadow_banned:
-            await send_notification(
-                from_name=row_str_or_none(immediate_data, 'name'),
-                to_username=to_username,
-                message=maybe_message.body,
-                is_intro=is_intro,
-                data=_conversation_screen_data(immediate_data),
-                has_subscribers=to_has_subscribers,
-            )
-
         response = MessageDelivered(
             stanza_id=stanza_id,
             stamp=sent_at_stamp,
@@ -981,10 +681,11 @@ async def process_text(
 
             await redis_publish_many(to_username, [delivery_message])
 
-            await send_web_push_notification(
+            await send_notifications(
                 from_id=from_id,
                 to_username=to_username,
                 message=maybe_message.body,
+                is_intro=is_intro,
                 immediate_data=immediate_data,
                 has_subscribers=to_has_subscribers,
             )
