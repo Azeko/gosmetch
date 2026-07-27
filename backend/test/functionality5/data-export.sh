@@ -29,13 +29,20 @@ quietly_assume_role () {
   q "delete from presence_histogram"
 }
 
+# Wait for images to be given nsfw scores, rather than racing the runner
+wait_for_nsfw_scores () {
+  while [[ "$(q "select count(*) from photo where nsfw_score is null")" != 0 ]]
+  do
+    sleep 0.1
+  done
+}
+
 update_snapshot () {
   q "delete from person"
 
   ../util/create-user.sh user1 2 2
 
-  # Wait for images to be given nsfw scores
-  sleep 13
+  wait_for_nsfw_scores
 
   qdump data-export
 
@@ -63,6 +70,8 @@ update_snapshot_or_restore () {
 
 setup () {
   update_snapshot_or_restore "$@"
+
+  wait_for_nsfw_scores
 
   quietly_assume_role user1
 }
