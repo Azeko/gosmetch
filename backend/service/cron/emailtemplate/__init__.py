@@ -1,36 +1,4 @@
-from constants import (
-    VISITOR_NOTIFICATION_BODY,
-    VISITOR_NOTIFICATION_TITLE,
-)
 from urllib.parse import urlencode
-
-MESSAGE_SUBJECT = 'You have a new message 😍'
-
-VISITOR_SUBJECT = VISITOR_NOTIFICATION_TITLE
-
-VISITOR_BIG_PART = VISITOR_NOTIFICATION_BODY
-
-VISITOR_LITTLE_PART = 'Open the app to see who'
-
-MESSAGE_URL = 'https://get.duolicious.app/inbox'
-
-VISITOR_URL = 'https://get.duolicious.app/visitors'
-
-def big_part(has_intro: bool, has_chat: bool) -> str:
-    if has_intro and has_chat:
-        return 'You have new messages in your chats and intros!'
-    if has_intro:
-        return 'You have a new message in your intros!'
-    if has_chat:
-        return 'You have a new message in your chats!'
-    return (
-        "Our notifier is broken 😵‍💫. Please report this "
-        "to support@duolicious.app")
-
-def little_part(has_intro: bool, has_chat: bool) -> str:
-    if has_intro and has_chat:
-        return 'Open the app to read them'
-    return 'Open the app to read it'
 
 def frequency_url(email: str, type: str, frequency: str) -> str:
     base_url = 'https://api.duolicious.app/update-notifications'
@@ -42,25 +10,7 @@ def frequency_url(email: str, type: str, frequency: str) -> str:
     encoded_params = urlencode(params)
     return f'{base_url}?{encoded_params}'
 
-def emailtemplate(email: str, has_intro: bool, has_chat: bool) -> str:
-    return _emailtemplate(
-        email=email,
-        subject=MESSAGE_SUBJECT,
-        big=big_part(has_intro, has_chat),
-        little=little_part(has_intro, has_chat),
-        url=MESSAGE_URL,
-    )
-
-def visitor_emailtemplate(email: str) -> str:
-    return _emailtemplate(
-        email=email,
-        subject=VISITOR_SUBJECT,
-        big=VISITOR_BIG_PART,
-        little=VISITOR_LITTLE_PART,
-        url=VISITOR_URL,
-    )
-
-def _emailtemplate(
+def notification_emailtemplate(
     email: str,
     subject: str,
     big: str,
