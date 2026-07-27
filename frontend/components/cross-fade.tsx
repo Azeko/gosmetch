@@ -2,7 +2,6 @@ import { ReactNode, useEffect, useRef, useState } from 'react';
 import { StyleProp, View, ViewStyle } from 'react-native';
 import Animated, {
   SharedValue,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -75,6 +74,45 @@ const CrossFade = ({
   );
 };
 
+type FadeTransitionProps = {
+  front: ReactNode
+  back: ReactNode
+  duration: number
+  onDone: () => void
+  style?: StyleProp<ViewStyle>
+};
+
+// One of these per transition, so that the layers carry their own starting
+// opacities into the commit that mounts them. Setting those opacities on layers
+// that are already mounted sends them to the UI thread by a separate route,
+// which lets Android paint a frame where the incoming layer is hidden and the
+// outgoing layer has yet to arrive.
+const FadeTransition = ({
+  front,
+  back,
+  duration,
+  onDone,
+  style,
+}: FadeTransitionProps) => {
+  const progress = useSharedValue(back === null ? 1 : 0);
+
+  useEffect(() => {
+    if (back === null) {
+      return;
+    }
+
+    progress.value = withTiming(1, { duration });
+
+    const timeout = setTimeout(onDone, duration);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  return (
+    <FadeLayers progress={progress} front={front} back={back} style={style} />
+  );
+};
+
 type CrossFadeTextProps = {
   triggerKey: string
   children: ReactNode
@@ -88,7 +126,6 @@ const CrossFadeText = ({
   duration = 300,
   style,
 }: CrossFadeTextProps) => {
-  const progress = useSharedValue(1);
   const [tx, setTx] = useState<{ key: string, outgoing: ReactNode }>({
     key: triggerKey,
     outgoing: null,
@@ -97,25 +134,19 @@ const CrossFadeText = ({
 
   if (tx.key !== triggerKey) {
     setTx({ key: triggerKey, outgoing: lastChildren.current });
-    progress.value = 0;
   }
 
   useEffect(() => {
     lastChildren.current = children;
   });
 
-  useEffect(() => {
-    if (tx.outgoing === null) return;
-    progress.value = withTiming(1, { duration }, (finished) => {
-      if (finished) runOnJS(setTx)((t) => ({ ...t, outgoing: null }));
-    });
-  }, [tx.key]);
-
   return (
-    <FadeLayers
-      progress={progress}
+    <FadeTransition
+      key={tx.key}
       front={children}
       back={tx.outgoing}
+      duration={duration}
+      onDone={() => setTx((t) => ({ ...t, outgoing: null }))}
       style={style}
     />
   );
