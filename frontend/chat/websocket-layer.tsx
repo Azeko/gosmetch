@@ -1,6 +1,10 @@
 import { CHAT_URL } from '../env/env';
 import { listen, notify } from '../events/events';
-import { delay, jsonParseSilently } from '../util/util';
+import {
+  delay,
+  jsonParseSilently,
+  makeBackoff,
+} from '../util/util';
 import { AppState, AppStateStatus, Platform } from 'react-native';
 
 type Pong = {
@@ -13,10 +17,10 @@ const EV_CHAT_WS_OPEN = 'chat-ws-open';
 const EV_CHAT_WS_RECEIVE = 'chat-ws-receive';
 const EV_CHAT_WS_SEND_CLOSE = 'chat-ws-send-close';
 
-const reconnectDelayStep = 1000;
-const maxReconnectDelay = 30000;
-const initialReconnectDelay = 0;
-let reconnectDelay = initialReconnectDelay;
+const stableConnectionMs = 10000;
+const backgroundedCloseGraceMs = 5000;
+const reconnectBackoff = makeBackoff();
+let backgroundedCloseTimeout: ReturnType<typeof setTimeout> | undefined;
 
 const pong: Pong = {
   preferredInterval: 10000,
@@ -26,10 +30,18 @@ const pong: Pong = {
 let lastEnteredActiveState =  new Date();
 
 let ws: WebSocket | null = null;
+let expectedClose = false;
 
-listen(EV_CHAT_WS_SEND_CLOSE, () => {
-  ws?.close();
-});
+const closeChatWebSocket = (): void => {
+  if (!ws) {
+    return;
+  }
+
+  expectedClose = true;
+  ws.close();
+};
+
+listen(EV_CHAT_WS_SEND_CLOSE, closeChatWebSocket);
 
 const isBackgrounded = (state: AppStateStatus): boolean =>
   Platform.OS !== 'web' && ['background', 'inactive'].includes(state);
@@ -45,8 +57,10 @@ const connectChatWebSocket = (): void => {
 
   ws = new WebSocket(CHAT_URL, ['json']);
 
+  let resetDelayTimeout: ReturnType<typeof setTimeout> | undefined;
+
   ws.onopen = () => {
-    reconnectDelay = initialReconnectDelay;
+    resetDelayTimeout = setTimeout(reconnectBackoff.reset, stableConnectionMs);
     notify(EV_CHAT_WS_OPEN);
   };
 
@@ -58,15 +72,16 @@ const connectChatWebSocket = (): void => {
   // If not, the ping mechanism should still restart the connection, though more
   // slowly.
   ws.onclose = (event: CloseEvent) => {
+    clearTimeout(resetDelayTimeout);
     notify<CloseEvent>(EV_CHAT_WS_CLOSE, event);
     ws = null;
-    setTimeout(() => {
-      reconnectDelay = Math.min(
-        2 * (reconnectDelay + reconnectDelayStep),
-        maxReconnectDelay
-      );
+
+    if (expectedClose) {
+      expectedClose = false;
       connectChatWebSocket();
-    }, reconnectDelay);
+    } else {
+      setTimeout(connectChatWebSocket, reconnectBackoff.next());
+    }
   };
 
   ws.onerror = () => {
@@ -237,14 +252,25 @@ const pingServerForever = async () => {
   };
 };
 
+const closeIfStillBackgrounded = (): void => {
+  if (isBackgrounded(AppState.currentState)) {
+    closeChatWebSocket();
+  }
+};
+
 const onChangeAppState = (state: AppStateStatus) => {
   if (state === 'active') {
     lastEnteredActiveState = new Date();
+    clearTimeout(backgroundedCloseTimeout);
     connectChatWebSocket();
   }
 
   if (isBackgrounded(state)) {
-    ws?.close();
+    clearTimeout(backgroundedCloseTimeout);
+    backgroundedCloseTimeout = setTimeout(
+      closeIfStillBackgrounded,
+      backgroundedCloseGraceMs,
+    );
   }
 };
 

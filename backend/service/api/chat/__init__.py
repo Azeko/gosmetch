@@ -2,8 +2,8 @@ import dataclasses
 from database import api_tx
 import asyncio
 import duohash
+import logging
 import regex
-import traceback
 import sys
 from websockets.exceptions import ConnectionClosedError
 from async_lru_cache import AsyncLruCache
@@ -115,6 +115,12 @@ from service.api.chat.audiomessage import (
 )
 import redis.asyncio as redis
 from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
+from service.api.ratelimit import (
+    RateLimitExceeded,
+    check_chat_connect_limit,
+    client_ip,
+)
 import json
 from service.api.chat.verification import (
     verification_required,
@@ -141,6 +147,8 @@ WHERE
 AND
     sign_up_time < now() - (interval '1 day') / power(verification_level_id, 2)
 """
+
+logger = logging.getLogger(__name__)
 
 MAX_MESSAGE_LEN = 5000
 
@@ -171,8 +179,10 @@ async def redis_forward_to_websocket(
             await websocket.send_text(data)
     except asyncio.CancelledError:
         raise
+    except WebSocketDisconnect:
+        pass
     except:
-        print(traceback.format_exc())
+        logger.exception('Exception while forwarding to the websocket')
 
 
 def normalize_message(message_str: str) -> str:
@@ -706,9 +716,30 @@ async def process_text(
 
 
 async def process_websocket_messages(websocket: WebSocket) -> None:
+    ip = client_ip(websocket)
+
+    try:
+        await check_chat_connect_limit(websocket)
+    except RateLimitExceeded:
+        logger.info(f'Chat connection rejected: rate limited; ip={ip}')
+        await websocket.close(code=1013)
+        return
+
     await websocket.accept(subprotocol='json')
 
+    connected_at = datetime.utcnow()
+
     session = Session()
+
+    def log_closed(reason: str) -> None:
+        duration = (datetime.utcnow() - connected_at).total_seconds()
+        logger.info(
+            f'Chat connection closed: '
+            f'ip={ip}; '
+            f'username={session.username}; '
+            f'duration={duration:.1f}s; '
+            f'reason={reason}'
+        )
 
     redis_websocket_client: redis.Redis = redis.Redis(
             host=REDIS_HOST,
@@ -731,6 +762,13 @@ async def process_websocket_messages(websocket: WebSocket) -> None:
 
     try:
         while True:
+            # A send that failed in `redis_forward_to_websocket` flips the
+            # websocket's application_state to DISCONNECTED, after which
+            # `receive_text` raises RuntimeError instead of WebSocketDisconnect.
+            if websocket.application_state != WebSocketState.CONNECTED:
+                log_closed('client disconnected during send')
+                break
+
             text = await websocket.receive_text()
 
             await asyncio.shield(
@@ -761,16 +799,15 @@ async def process_websocket_messages(websocket: WebSocket) -> None:
             if not is_subscribed_by_username and session.username:
                 await pubsub.subscribe(session.username)
                 is_subscribed_by_username = True
-    except WebSocketDisconnect:
-        pass
+    except WebSocketDisconnect as e:
+        log_closed(f'client disconnected (code={e.code})')
     except asyncio.CancelledError:
+        log_closed('cancelled at shutdown')
         raise
     except:
-        print(
-            datetime.utcnow(),
-            f"Exception while processing for username: {session.username}"
-        )
-        print(traceback.format_exc())
+        log_closed('exception')
+        logger.exception(
+            f'Exception while processing for username: {session.username}')
     finally:
         if update_online_task:
             update_online_task.cancel()
@@ -789,7 +826,7 @@ async def process_websocket_messages(websocket: WebSocket) -> None:
                 try:
                     await pubsub.unsubscribe(session.username)
                 except:
-                    print(traceback.format_exc())
+                    logger.exception('Exception while unsubscribing')
 
             try:
                 await update_online_once(
