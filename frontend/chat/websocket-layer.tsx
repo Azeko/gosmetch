@@ -22,9 +22,7 @@ const EV_CHAT_WS_RECEIVE = 'chat-ws-receive';
 const EV_CHAT_WS_SEND_CLOSE = 'chat-ws-send-close';
 
 const stableConnectionMs = 10000;
-const backgroundedCloseGraceMs = 5000;
 const reconnectBackoff = makeBackoff();
-let backgroundedCloseTimeout: ReturnType<typeof setTimeout> | undefined;
 
 const pong: Pong = {
   preferredInterval: 10000,
@@ -51,7 +49,7 @@ const closeChatWebSocket = (): void => {
 // immediately. Dropping the reference right away lets a reconnect proceed
 // without waiting for the zombie to time out. The zombie's own callbacks are
 // inert thanks to the `ws !== _ws` guards.
-const abandonChatWebSocket = (): void => {
+const dropChatWebSocket = (): void => {
   const _ws = ws;
 
   if (!_ws) {
@@ -62,12 +60,25 @@ const abandonChatWebSocket = (): void => {
   expectedClose = false;
   _ws.close();
   notify(EV_CHAT_WS_CLOSE);
+};
+
+const dropChatWebSocketAndReconnect = (): void => {
+  if (!ws) {
+    return;
+  }
+
+  dropChatWebSocket();
   setTimeout(connectChatWebSocket, reconnectBackoff.next());
 };
 
 listen(EV_CHAT_WS_SEND_CLOSE, closeChatWebSocket);
 
-const isBackgrounded = (state: AppStateStatus): boolean =>
+// 'inactive' and 'background' both mean the app isn't in the foreground. Only
+// 'background' means it actually went away, though: iOS reports 'inactive' for
+// transient interruptions like the app switcher, the notification shade or a
+// permission dialog, so the two states are treated differently below - we stop
+// connecting during either, but only disconnect on the latter.
+const isNotForeground = (state: AppStateStatus): boolean =>
   Platform.OS !== 'web' && ['background', 'inactive'].includes(state);
 
 const isOffline = (): boolean =>
@@ -78,7 +89,7 @@ const connectChatWebSocket = (): void => {
     return;
   }
 
-  if (isBackgrounded(AppState.currentState)) {
+  if (isNotForeground(AppState.currentState)) {
     return;
   }
 
@@ -285,7 +296,7 @@ const pingServer = async () => {
 
   if (response === 'timeout') {
     // An unresponsive connection would stall the closing handshake too.
-    abandonChatWebSocket();
+    dropChatWebSocketAndReconnect();
   } else {
     Object.assign(pong, response);
   }
@@ -298,25 +309,20 @@ const pingServerForever = async () => {
   };
 };
 
-const closeIfStillBackgrounded = (): void => {
-  if (isBackgrounded(AppState.currentState)) {
-    closeChatWebSocket();
-  }
-};
-
 const onChangeAppState = (state: AppStateStatus) => {
   if (state === 'active') {
     lastEnteredActiveState = new Date();
-    clearTimeout(backgroundedCloseTimeout);
     connectChatWebSocket();
   }
 
-  if (isBackgrounded(state)) {
-    clearTimeout(backgroundedCloseTimeout);
-    backgroundedCloseTimeout = setTimeout(
-      closeIfStillBackgrounded,
-      backgroundedCloseGraceMs,
-    );
+  // The close has to happen synchronously here. React Native stops
+  // dispatching JS timers once the app is backgrounded
+  // (`JavaTimerManager.onHostPause` clears the timer frame callback on
+  // Android; iOS suspends the JS thread), so a deferred close would only run
+  // after the app came back - leaving the connection, and the user's 'online'
+  // status, alive for the whole time the app was away.
+  if (Platform.OS !== 'web' && state === 'background') {
+    dropChatWebSocket();
   }
 };
 
@@ -325,12 +331,12 @@ const onChangeAppState = (state: AppStateStatus) => {
 AppState.addEventListener('change', onChangeAppState);
 
 // Desktop browsers don't close websockets when connectivity drops; the socket
-// object stays OPEN until a write times out. Abandon it (rather than just
-// closing: see `abandonChatWebSocket`) so the came-online reconnect below
-// isn't blocked by a socket stuck in CLOSING.
+// object stays OPEN until a write times out. Drop it rather than closing it,
+// so the came-online reconnect below isn't blocked by a socket stuck in
+// CLOSING.
 listen<boolean>(EV_NETWORK_IS_ONLINE, (isOnline) => {
   if (isOnline === false) {
-    abandonChatWebSocket();
+    dropChatWebSocketAndReconnect();
   }
 });
 
