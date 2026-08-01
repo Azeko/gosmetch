@@ -1,18 +1,31 @@
-import { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import { Pressable, StyleSheet } from 'react-native';
 import { DefaultText } from '../default-text';
 import { showPointOfSale } from '../modal/point-of-sale-modal';
 import { useAppTheme } from '../../app-theme/app-theme';
 import { CrossFadeText } from '../cross-fade';
 import { useReadReceipt } from '../../chat/application-layer/hooks/read-receipt';
 import {
+  Content,
   contentKey,
-  contentText,
+  contentParts,
   receiptContent,
   useReceiptSide,
 } from './message-receipt-logic';
+
+const ReceiptText = ({ content }: { content: Content }) => {
+  const { label, detail } = contentParts(content);
+
+  return (
+    <>
+      {label !== '' &&
+        <DefaultText disableTheme={true} style={styles.labelText}>
+          {label}
+        </DefaultText>
+      }
+      {detail}
+    </>
+  );
+};
 
 const MessageReceipt = ({
   personUuid,
@@ -27,34 +40,31 @@ const MessageReceipt = ({
 }) => {
   const { appTheme } = useAppTheme();
   const readAt = useReadReceipt(personUuid, deliveredAt);
-  const side = useReceiptSide(deliveredAt, readAt, pressToggle);
+  const side = useReceiptSide(deliveredAt, readAt, hasGold, pressToggle);
 
   const content = receiptContent({ deliveredAt, readAt, hasGold, side });
-
-  const upsellGesture = useMemo(
-    () => Gesture.Tap().onEnd(() => runOnJS(showPointOfSale)(true)),
-    []
-  );
 
   return (
     <CrossFadeText triggerKey={contentKey(content)} style={styles.container}>
       {content.kind === 'upsell' ?
-        <GestureDetector gesture={upsellGesture}>
-          <View style={styles.upsellTarget}>
-            <DefaultText
-              disableTheme={true}
-              style={{
-                ...styles.upsellText,
-                ...{
-                  color: appTheme.brandColor,
-                  fontSize: appTheme.timestampFontSize,
-                }
-              }}
-            >
-              {contentText(content)}
-            </DefaultText>
-          </View>
-        </GestureDetector>
+        <Pressable
+          onPress={() => showPointOfSale(true)}
+          hitSlop={{ top: 5, bottom: 10, left: 10, right: 10 }}
+          style={styles.upsellTarget}
+        >
+          <DefaultText
+            disableTheme={true}
+            style={{
+              ...styles.upsellText,
+              ...{
+                color: appTheme.brandColor,
+                fontSize: appTheme.timestampFontSize,
+              }
+            }}
+          >
+            <ReceiptText content={content} />
+          </DefaultText>
+        </Pressable>
       :
         <DefaultText
           disableTheme={true}
@@ -66,7 +76,7 @@ const MessageReceipt = ({
             }
           }}
         >
-          {contentText(content)}
+          <ReceiptText content={content} />
         </DefaultText>
       }
     </CrossFadeText>
@@ -76,7 +86,7 @@ const MessageReceipt = ({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    marginTop: 3,
+    marginTop: 5,
   },
   text: {
     textAlign: 'right',
@@ -89,8 +99,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     cursor: 'pointer',
   },
+  labelText: {
+    fontWeight: '700',
+  },
 });
 
 export {
   MessageReceipt,
+  ReceiptText,
 };

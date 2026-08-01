@@ -1,12 +1,12 @@
-import { describe, expect, jest, test } from '@jest/globals';
+import { describe, expect, test } from '@jest/globals';
 import {
   Content,
   ReceiptState,
   Side,
   contentKey,
+  contentParts,
   contentText,
   newsKey,
-  readStatusDelayMs,
   receiptContent,
   useReceiptSide,
 } from './message-receipt-logic';
@@ -148,6 +148,35 @@ describe('contentText', () => {
   });
 });
 
+describe('contentParts', () => {
+  test('the delivered label stands apart from the time', () => {
+    expect(contentParts({ kind: 'delivered', timestamp: DELIVERED_AT }).label)
+      .toEqual('Delivered');
+  });
+
+  test('the seen label stands apart from the time', () => {
+    expect(contentParts({ kind: 'read', timestamp: READ_AT }).label)
+      .toEqual('Seen');
+  });
+
+  test('the other kinds carry no label', () => {
+    expect(contentParts({ kind: 'blank' }).label).toEqual('');
+    expect(contentParts({ kind: 'upsell' }).label).toEqual('');
+  });
+
+  test('the unseen status is all label', () => {
+    expect(contentParts({ kind: 'unread' }))
+      .toEqual({ label: 'Not seen yet', detail: '' });
+  });
+
+  test('the label and detail together read as the full text', () => {
+    const content: Content = { kind: 'read', timestamp: READ_AT };
+    const { label, detail } = contentParts(content);
+
+    expect(label + detail).toEqual(contentText(content));
+  });
+});
+
 describe('newsKey', () => {
   test('the same delivery and read times keep the same key', () => {
     expect(newsKey(DELIVERED_AT, READ_AT))
@@ -170,11 +199,12 @@ describe('useReceiptSide', () => {
   type Props = {
     deliveredAt: Date | null
     readAt: Date | null
+    hasGold: boolean
     pressToggle: boolean
   };
 
-  const Probe = ({ deliveredAt, readAt, pressToggle }: Props) => {
-    latest = useReceiptSide(deliveredAt, readAt, pressToggle);
+  const Probe = ({ deliveredAt, readAt, hasGold, pressToggle }: Props) => {
+    latest = useReceiptSide(deliveredAt, readAt, hasGold, pressToggle);
     return null;
   };
 
@@ -182,6 +212,7 @@ describe('useReceiptSide', () => {
     let props: Props = {
       deliveredAt: DELIVERED_AT,
       readAt: null,
+      hasGold: true,
       pressToggle: false,
       ...initial,
     };
@@ -207,40 +238,20 @@ describe('useReceiptSide', () => {
     };
   };
 
-  const wait = (ms: number) => act(() => { jest.advanceTimersByTime(ms) });
-
-  beforeEach(() => {
-    jest.useFakeTimers();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
   describe('settling on its own', () => {
-    test('the slot starts on the delivery time', () => {
+    test('a gold user\'s slot starts on the delivery time', () => {
       render();
 
       expect(latest).toEqual('delivered');
     });
 
-    test('the status takes the slot once the wait is up', () => {
-      render();
-
-      wait(readStatusDelayMs);
+    test('a non-gold user\'s slot starts on the status side', () => {
+      render({ hasGold: false });
 
       expect(latest).toEqual('status');
     });
 
-    test('the status does not take the slot early', () => {
-      render();
-
-      wait(readStatusDelayMs - 1);
-
-      expect(latest).toEqual('delivered');
-    });
-
-    test('an arriving receipt takes the slot without waiting', () => {
+    test('an arriving receipt takes the slot', () => {
       const { set } = render();
 
       set({ readAt: READ_AT });
@@ -248,12 +259,12 @@ describe('useReceiptSide', () => {
       expect(latest).toEqual('status');
     });
 
-    test('an undelivered message never starts the wait', () => {
-      render({ deliveredAt: null });
+    test('a receipt keeps a non-gold user\'s slot on the status side', () => {
+      const { set } = render({ hasGold: false });
 
-      wait(readStatusDelayMs * 10);
+      set({ readAt: READ_AT });
 
-      expect(latest).toEqual('delivered');
+      expect(latest).toEqual('status');
     });
   });
 
@@ -275,33 +286,12 @@ describe('useReceiptSide', () => {
       expect(latest).toEqual('delivered');
     });
 
-    test('a pinned slot does not lose the wait to the status', () => {
-      const { press } = render();
+    test('a press shows a non-gold user the delivery time', () => {
+      const { press } = render({ hasGold: false });
 
-      press();
-      press();
-      wait(readStatusDelayMs * 10);
-
-      expect(latest).toEqual('delivered');
-    });
-
-    test('a press after the wait is up pins the delivery time', () => {
-      const { press } = render();
-
-      wait(readStatusDelayMs);
       press();
 
       expect(latest).toEqual('delivered');
-    });
-
-    test('a press before delivery does not stop the wait', () => {
-      const { set, press } = render({ deliveredAt: null });
-
-      press();
-      set({ deliveredAt: DELIVERED_AT });
-      wait(readStatusDelayMs);
-
-      expect(latest).toEqual('status');
     });
   });
 
@@ -313,6 +303,15 @@ describe('useReceiptSide', () => {
       set({ deliveredAt: DELIVERED_AT });
 
       expect(latest).toEqual('delivered');
+    });
+
+    test('delivery settles a non-gold user\'s slot on the status side', () => {
+      const { set, press } = render({ deliveredAt: null, hasGold: false });
+
+      press();
+      set({ deliveredAt: DELIVERED_AT });
+
+      expect(latest).toEqual('status');
     });
 
     test('an arriving receipt takes the slot off what was pinned', () => {
