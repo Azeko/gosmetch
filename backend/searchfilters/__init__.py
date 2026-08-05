@@ -8,6 +8,7 @@ from database import (
     Row,
     row_bool,
     row_int,
+    row_int_list,
     row_int_list_or_none,
     row_int_or_none,
     row_str,
@@ -134,29 +135,48 @@ _SHOWS_ONLINE_STATUS = sql_fragment("""
 """)
 
 
-_ANSWER_NOT_EXISTS = sql_fragment("""
-    NOT EXISTS (
-        SELECT 1
-        FROM (
-            SELECT *
-            FROM search_preference_answer
-            WHERE person_id = %(searcher_person_id)s
-        ) AS pref
-        LEFT JOIN
-            answer ans
+# The prospect answered none of the searcher's Q&A filters contrarily. The
+# subquery is deliberately uncorrelated: the planner builds the exclusion set
+# once per statement and hashes every prospect against it, where a correlated
+# form re-probes `answer` per prospect and made broad searches time out. In
+# per-prospect consumers (inbox) the hashed subplan is likewise built once per
+# statement and reused across rows.
+_ANSWER_NOT_CONTRARY = sql_fragment("""
+    prospect.id NOT IN (
+        SELECT
+            ans.person_id
+        FROM
+            search_preference_answer AS pref
+        JOIN
+            answer AS ans
         ON
-            ans.person_id = prospect.id AND
             ans.question_id = pref.question_id
         WHERE
-            -- Contrary because the answer exists and is wrong
+            pref.person_id = %(searcher_person_id)s AND
             ans.answer IS NOT NULL AND
             ans.answer != pref.answer
-        OR
-            -- Contrary because the answer doesn't exist but should
-            ans.answer IS NULL AND
-            pref.accept_unanswered = FALSE
     )
 """)
+
+
+# The prospect answered this Q&A filter whose accept_unanswered is FALSE. One
+# clause per required question rather than a single aggregated set: a GROUP
+# BY/HAVING subquery gets un-nested into a semi-join against an unindexed
+# aggregate, which the planner nested-loops under row misestimates (>60s on
+# prod data), whereas plain membership in `answer` keeps its indexes usable by
+# every join strategy.
+def _answer_required_clause(param: str) -> str:
+    return sql_fragment(f"""
+        prospect.id IN (
+            SELECT
+                person_id
+            FROM
+                answer
+            WHERE
+                question_id = %({param})s AND
+                answer IS NOT NULL
+        )
+    """)
 
 
 _PARAM_ENUM_SELECTS = ',\n'.join(
@@ -271,6 +291,13 @@ SELECT
         FROM search_preference_answer
         WHERE person_id = person.id
     ) AS has_answer_prefs,
+    ARRAY(
+        SELECT question_id
+        FROM search_preference_answer
+        WHERE person_id = person.id
+        AND accept_unanswered = FALSE
+        ORDER BY question_id
+    ) AS required_answer_question_ids,
     person.coordinates::TEXT AS searcher_coordinates,
     person.personality::TEXT AS searcher_personality,
     EXTRACT(YEAR FROM AGE(person.date_of_birth))::INT AS searcher_age,
@@ -339,7 +366,13 @@ def prospect_filters(prefs: Row) -> ProspectFilters:
 
     if row_bool(prefs, 'has_answer_prefs'):
         params['searcher_person_id'] = row_int(prefs, 'searcher_person_id')
-        clauses.append(_ANSWER_NOT_EXISTS)
+        clauses.append(_ANSWER_NOT_CONTRARY)
+
+    for i, question_id in enumerate(
+            row_int_list(prefs, 'required_answer_question_ids')):
+        param = f'required_answer_question_id_{i}'
+        params[param] = question_id
+        clauses.append(_answer_required_clause(param))
 
     return ProspectFilters(clauses=clauses, params=params)
 
