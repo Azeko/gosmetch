@@ -31,6 +31,7 @@ import { computeStartupNavigationState } from '../navigation/startup';
 import { createLinking, focusedConversationHandle } from '../navigation/linking';
 import { resetUserScopedClientState } from '../navigation/reset-client-state';
 import { hasPendingAppleWebSignIn } from '../api/social-auth';
+import { adoptWebSessionOnApex } from '../kv-storage/session-bridge';
 import { showSignUp } from '../components/modal/sign-up-modal';
 
 ExpoSplashScreen.preventAutoHideAsync();
@@ -134,6 +135,8 @@ const useAppStartup = (
   );
 
   const restoreSessionAndNavigate = useCallback(async () => {
+    await adoptWebSessionOnApex();
+
     const existingPersonUuid = await sessionPersonUuid();
     const existingSessionToken = await sessionToken();
     const notification = await getLastNotificationResponseOnMobile();

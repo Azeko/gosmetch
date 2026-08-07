@@ -18,6 +18,7 @@ const KEYS = [
   'seen_search_filters_hint',
   'session_token',
   'was_review_requested',
+  'web_session_bridge_answered',
 ] as const;
 
 type Key = typeof KEYS[number];
@@ -135,6 +136,8 @@ const clearAllKvExceptSessionToken = async () => {
 };
 
 export {
+  KEYS,
+  Key,
   storeKv,
   clearAllKv,
   clearAllKvExceptSessionToken,
