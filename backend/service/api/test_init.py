@@ -1,7 +1,7 @@
 import unittest
 from service.api.bootstrap import migrate_unnormalized_emails
-from database import api_tx
-from database.testcase import DbTestCase
+from serviceshared.database import api_tx
+from serviceshared.database.testcase import DbTestCase
 
 Q_DELETE_PERSONS = """
 DELETE FROM person
@@ -17,6 +17,9 @@ INSERT INTO person (
     coordinates,
     gender_id,
     about,
+    location_short_friendly,
+    location_long_friendly,
+    location_country,
     unit_id
 )
 VALUES (
@@ -28,6 +31,22 @@ VALUES (
     ST_MakePoint(0.0, 0.0),
     1,
     '',
+    'Sydney',
+    'Sydney, New South Wales, Australia',
+    'Australia',
+    1
+), (
+    'legacy@googlemail.com',
+    'legacy@googlemail.com',
+    'Bob',
+    'bob',
+    '2000-01-01',
+    ST_MakePoint(0.0, 0.0),
+    1,
+    '',
+    'Sydney',
+    'Sydney, New South Wales, Australia',
+    'Australia',
     1
 )
 """
@@ -69,7 +88,7 @@ class Test(DbTestCase):
             emails = [row['normalized_email'] for row in rows]
             self.assertEqual(
                 emails,
-                ['example@gmail.com'])
+                ['example@gmail.com', 'legacy@gmail.com'])
 
             rows = await (await tx.execute(Q_SELECT_BANNED_PERSON_EMAILS)).fetchall()
             emails = [row['normalized_email'] for row in rows]
