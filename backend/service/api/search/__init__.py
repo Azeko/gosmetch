@@ -4,7 +4,8 @@ import service.api.duotypes as t
 from service.api import sessioncache
 from service.api.qanda import personality
 from pydantic import ValidationError
-from serviceshared.database import Tx, api_tx, row_int
+from serviceshared.database import Tx, api_tx, row_bool, row_int
+from serviceshared.pgvector import to_pgvector
 from service.api.qanda.question import Q_QUESTION_SCORE_VECTORS
 from service.api.search.rediscache import redis_cache
 from collections.abc import Sequence
@@ -15,10 +16,11 @@ from service.api.search.sql import (
     Q_CACHED_SEARCH,
     Q_PUBLIC_SEARCH,
     Q_PUBLIC_SEARCH_WITH_ANSWERS,
-    Q_QUIZ_SEARCH,
+    Q_SORT_BY_CLUBS,
     Q_DELETE_SEARCH_CACHE,
     Q_FEED,
     Q_FEED_V2,
+    build_quiz_search,
     build_uncached_search,
 )
 from dataclasses import dataclass
@@ -38,7 +40,12 @@ async def _quiz_search_results(
         searcher_person_id=searcher_person_id,
     )
 
-    await tx.execute(Q_QUIZ_SEARCH, params)
+    sort_by_clubs = row_bool(
+        await tx.require_one(Q_SORT_BY_CLUBS, params),
+        'sort_by_clubs',
+    )
+
+    await tx.execute(build_quiz_search(sort_by_clubs), params)
     return await tx.fetchall()
 
 
@@ -215,7 +222,7 @@ async def _get_public_search_with_answers(req: t.PublicSearchRequest) -> object:
             if a.question_id in questions
         )
 
-        searcher_personality = personality.to_pgvector(
+        searcher_personality = to_pgvector(
             personality.personality_vector(presence, absence, count))
 
         await tx.execute(Q_PUBLIC_SEARCH_WITH_ANSWERS, dict(

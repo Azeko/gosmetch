@@ -105,7 +105,14 @@ _VERIFICATION_SATISFIED = sql_fragment("""
     )
 """)
 
-_PROSPECT_SELECT = """    SELECT
+_CLUB_DISTANCE = \
+    'prospect.club_vector <#> %(searcher_club_vector)s::VECTOR'
+
+
+def _prospect_select(sort_by_clubs: bool) -> str:
+    club_distance = _CLUB_DISTANCE if sort_by_clubs else '0::REAL'
+
+    return f"""    SELECT
         prospect.id AS prospect_person_id,
 
         uuid AS prospect_uuid,
@@ -138,9 +145,16 @@ _PROSPECT_SELECT = """    SELECT
             0,
             99,
             100 * (1 - (prospect.personality <#> %(searcher_personality)s::VECTOR)) / 2
-        ) AS match_percentage"""
+        ) AS match_percentage,
 
-_SEARCH_CACHE_INSERT = """), do_promote_verified AS (
+        {club_distance} AS club_distance"""
+
+def _rank(sort_by_clubs: bool) -> str:
+    return 'club_distance' if sort_by_clubs else 'match_percentage DESC'
+
+
+def _search_cache_insert(sort_by_clubs: bool) -> str:
+    return f"""), do_promote_verified AS (
     SELECT
         count(*) >= 250 AS x
     FROM
@@ -161,6 +175,7 @@ INSERT INTO search_cache (
     name,
     age,
     match_percentage,
+    club_distance,
     personality,
     verified
 )
@@ -177,7 +192,7 @@ SELECT
                     profile_photo_uuid IS NOT NULL
             END DESC,
 
-            match_percentage DESC
+            {_rank(sort_by_clubs)}
     ) AS position,
     prospect_person_id,
     prospect_uuid,
@@ -185,6 +200,7 @@ SELECT
     name,
     age,
     match_percentage,
+    club_distance,
     personality,
     verified
 FROM
@@ -202,6 +218,7 @@ ON CONFLICT (searcher_person_id, position) DO UPDATE SET
     name = EXCLUDED.name,
     age = EXCLUDED.age,
     match_percentage = EXCLUDED.match_percentage,
+    club_distance = EXCLUDED.club_distance,
     personality = EXCLUDED.personality,
     verified = EXCLUDED.verified
 """
@@ -260,6 +277,11 @@ def build_uncached_search(
     if club_preference is not None:
         params['club_preference'] = club_preference
 
+    sort_by_clubs = row_str(prefs, 'sort_by') == 'Similar clubs'
+    if sort_by_clubs:
+        params['searcher_club_vector'] = row_str(
+            prefs, 'searcher_club_vector')
+
     reverse = two_way_filters(prefs)
     params.update(reverse.params)
 
@@ -272,20 +294,26 @@ def build_uncached_search(
         *filters.clauses,
     ])
 
+    if sort_by_clubs:
+        candidate_order = _CLUB_DISTANCE
+    else:
+        candidate_order = \
+            'prospect.personality <#> %(searcher_personality)s::VECTOR'
+
     sql = f"""
 WITH candidates AS (
-{_PROSPECT_SELECT}
+{_prospect_select(sort_by_clubs)}
     FROM
 {_from_clause(club_preference)}
     WHERE
         {where}
 
     ORDER BY
-        prospect.personality <#> %(searcher_personality)s::VECTOR
+        {candidate_order}
 
     LIMIT
         750
-{_SEARCH_CACHE_INSERT}"""
+{_search_cache_insert(sort_by_clubs)}"""
 
     return sql, params
 
@@ -400,7 +428,22 @@ ON
     private_page.prospect_person_id = public_page.prospect_person_id
 """
 
-Q_QUIZ_SEARCH = f"""
+Q_SORT_BY_CLUBS = """
+SELECT
+    sort_by.name = 'Similar clubs' AS sort_by_clubs
+FROM
+    search_preference
+JOIN
+    sort_by
+ON
+    sort_by.id = search_preference.sort_by_id
+WHERE
+    search_preference.person_id = %(searcher_person_id)s
+"""
+
+
+def build_quiz_search(sort_by_clubs: bool) -> str:
+    return f"""
 WITH searcher AS (
     SELECT
         personality,
@@ -471,7 +514,7 @@ WITH searcher AS (
                 profile_photo_uuid IS NOT NULL
         END DESC,
 
-        match_percentage DESC
+        {_rank(sort_by_clubs)}
     LIMIT
         1
 )

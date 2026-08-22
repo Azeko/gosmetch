@@ -21,6 +21,7 @@ import { faPills } from '@fortawesome/free-solid-svg-icons/faPills'
 import { faSmoking } from '@fortawesome/free-solid-svg-icons/faSmoking'
 import { faVenusMars } from '@fortawesome/free-solid-svg-icons/faVenusMars'
 import { faPaperPlane } from '@fortawesome/free-solid-svg-icons/faPaperPlane'
+import { faArrowDownWideShort } from '@fortawesome/free-solid-svg-icons/faArrowDownWideShort'
 import { faLocationDot } from '@fortawesome/free-solid-svg-icons/faLocationDot'
 import { faImage } from '@fortawesome/free-solid-svg-icons/faImage'
 import { faCalendar } from '@fortawesome/free-solid-svg-icons/faCalendar'
@@ -452,6 +453,13 @@ const lastOnlineValues = [
   'A week ago',
   lastOnlineDefault,
   'All time',
+];
+
+const sortByDefault = 'Match percentage';
+
+const sortByValues = [
+  sortByDefault,
+  'Similar clubs',
 ];
 
 const immediacy = [
@@ -2040,6 +2048,38 @@ const searchInteractionsOptionGroups: OptionGroup<OptionGroupInputs>[] = [
   },
 ];
 
+const searchOrderOptionGroups: OptionGroup<OptionGroupInputs>[] = [
+  {
+    title: "Sort By",
+    Icon: ({ color = 'black' }) => (
+      <FontAwesomeIcon
+        icon={faArrowDownWideShort}
+        size={14}
+        style={{ color }}
+      />
+    ),
+    description: "How should search results be sorted? “Match percentage” shows people with Q&A answers like yours first. “Similar clubs” shows members with clubs like yours first.",
+    input: {
+      buttons: {
+        values: sortByValues,
+        submit: async (sortBy: string) => {
+          const go = async () => {
+            const ok = (await japi(
+              'post',
+              '/search-filter',
+              { sort_by: sortBy }
+            )).ok;
+            return ok;
+          };
+          searchQueue.addTask(go);
+          patchSearchFilters({ sort_by: sortBy });
+          return true;
+        }
+      }
+    },
+  },
+];
+
 // Every filter that can be made two-way, in Search Filters screen order. Kept
 // in sync with the screen by deriving key/label/icon straight from the option
 // groups. Last Online is excluded: a searcher is online at the moment they
@@ -2069,6 +2109,7 @@ const defaultSearchFilters = (): SearchFilters => {
     ...searchBasicsOptionGroups,
     ...searchOtherBasicsOptionGroups,
     ...searchInteractionsOptionGroups,
+    ...searchOrderOptionGroups,
   ];
 
   for (const og of optionGroups) {
@@ -2090,6 +2131,7 @@ const defaultSearchFilters = (): SearchFilters => {
   filters.last_online = lastOnlineDefault;
   filters.people_you_messaged = 'Yes';
   filters.people_you_skipped = 'No';
+  filters.sort_by = sortByDefault;
   filters.two_way_filters = defaultTwoWayFilters();
 
   return filters;
@@ -2486,6 +2528,7 @@ export {
   searchBasicsOptionGroups,
   searchOtherBasicsOptionGroups,
   searchInteractionsOptionGroups,
+  searchOrderOptionGroups,
   socialAccountOptionGroups,
   twoWayFilterList,
   themePickerOptionGroups,

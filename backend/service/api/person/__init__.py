@@ -269,6 +269,11 @@ async def _handle_pending_club(
     if person_id is not None and pending_club_name is not None:
         await tx.execute(Q_JOIN_CLUB, club_params)
         await tx.execute(Q_SET_SEARCH_PREFERENCE_CLUB, club_params)
+        await tx.execute(
+            Q_REFRESH_CLUB_VECTOR, dict(person_id=person_id))
+    elif person_id is not None:
+        await tx.execute(
+            Q_REFRESH_STALE_CLUB_VECTOR, dict(person_id=person_id))
     return await tx.require_one(Q_GET_SESSION_CLUBS, club_params)
 
 
@@ -1719,6 +1724,13 @@ async def post_search_filter(req: t.PostSearchFilter, s: t.SessionInfo) -> objec
         WHERE last_online.name = %(field_value)s
         AND person_id = %(person_id)s
         """
+    elif field_name == 'sort_by':
+        q = """
+        UPDATE search_preference SET sort_by_id = sort_by.id
+        FROM sort_by
+        WHERE sort_by.name = %(field_value)s
+        AND person_id = %(person_id)s
+        """
     elif field_name == 'people_you_messaged':
         q = """
         UPDATE search_preference SET show_messaged = yes_no.name = 'Yes'
@@ -1906,6 +1918,8 @@ async def post_join_club(req: t.PostJoinClub, s: t.SessionInfo) -> object:
     async with api_tx('READ COMMITTED') as tx:
         row_tx = await tx.execute(Q_JOIN_CLUB, params)
         rows = await row_tx.fetchall()
+        await tx.execute(
+            Q_REFRESH_CLUB_VECTOR, dict(person_id=s.person_id))
 
     if rows:
         return f"Joined {req.name}", 200
@@ -1920,6 +1934,8 @@ async def post_leave_club(req: t.PostLeaveClub, s: t.SessionInfo) -> None:
 
     async with api_tx('READ COMMITTED') as tx:
         await tx.execute(Q_LEAVE_CLUB, params)
+        await tx.execute(
+            Q_REFRESH_CLUB_VECTOR, dict(person_id=s.person_id))
 
 async def get_update_notifications(
     email: str,

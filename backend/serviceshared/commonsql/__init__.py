@@ -60,6 +60,50 @@ WHERE
     id = %(person_id)s
 """
 
+def _q_refresh_club_vector(where: str) -> str:
+    return f"""
+UPDATE
+    person
+SET
+    club_vector = COALESCE(
+        (
+            SELECT l2_normalize(SUM(club.embedding))
+            FROM person_club
+            JOIN club
+            ON club.name = person_club.club_name
+            WHERE person_club.person_id = person.id
+        ),
+        array_full(64, 0)::VECTOR(64)
+    ),
+    club_vector_computed_at = NOW()
+WHERE
+    {where}
+"""
+
+
+_STALE_CLUB_VECTOR = """club_vector_computed_at < (
+        SELECT completed_at FROM club_embedding_refresh
+    )"""
+
+Q_REFRESH_CLUB_VECTOR = _q_refresh_club_vector('id = %(person_id)s')
+
+Q_REFRESH_STALE_CLUB_VECTOR = _q_refresh_club_vector(f"""id = %(person_id)s
+AND
+    {_STALE_CLUB_VECTOR}""")
+
+Q_REFRESH_STALE_CLUB_VECTOR_BY_UUID = _q_refresh_club_vector(f"""uuid = %(person_uuid)s::UUID
+AND
+    {_STALE_CLUB_VECTOR}""")
+
+Q_REFRESH_STALE_CLUB_VECTORS_BATCH = _q_refresh_club_vector(f"""id IN (
+        SELECT p.id
+        FROM person p
+        WHERE p.club_vector_computed_at < (
+            SELECT completed_at FROM club_embedding_refresh
+        )
+        LIMIT %(batch_size)s
+    )""")
+
 Q_UPDATE_LAST = """
 WITH updated_person AS (
     UPDATE
