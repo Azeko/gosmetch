@@ -20,6 +20,11 @@ set -xe
 
 q "update person set activated = false where name = 'user1'"
 
+pending_count_deltas () {
+  q "select count(*) from club_count_delta"
+}
+assert_eventually "0" pending_count_deltas
+
 response=$(c GET '/stats')
 
 [[ $(jq -r '.num_active_users' <<< "$response") = 1 ]]

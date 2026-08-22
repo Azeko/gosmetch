@@ -1903,7 +1903,7 @@ async def post_join_club(req: t.PostJoinClub, s: t.SessionInfo) -> object:
         update_event=True,
     )
 
-    async with api_tx() as tx:
+    async with api_tx('READ COMMITTED') as tx:
         row_tx = await tx.execute(Q_JOIN_CLUB, params)
         rows = await row_tx.fetchall()
 
@@ -1918,7 +1918,7 @@ async def post_leave_club(req: t.PostLeaveClub, s: t.SessionInfo) -> None:
         club_name=req.name,
     )
 
-    async with api_tx() as tx:
+    async with api_tx('READ COMMITTED') as tx:
         await tx.execute(Q_LEAVE_CLUB, params)
 
 async def get_update_notifications(

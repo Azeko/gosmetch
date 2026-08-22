@@ -143,7 +143,7 @@ async def init_db() -> None:
 
     await maybe_run_init()
 
-    async with api_tx() as tx:
+    async with api_tx('READ COMMITTED') as tx:
         await tx.execute('SET LOCAL statement_timeout = 300000') # 5 minutes
         await tx.execute(migrations_sql_file)
 
@@ -153,7 +153,7 @@ async def init_db() -> None:
     async with api_tx() as tx:
         await tx.execute(email_domains_good_file)
 
-    async with api_tx() as tx:
+    async with api_tx('READ COMMITTED') as tx:
         await tx.execute('SET LOCAL statement_timeout = 300000') # 5 minutes
         await tx.execute(banned_club_file)
 

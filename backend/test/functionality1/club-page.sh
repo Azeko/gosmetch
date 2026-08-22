@@ -150,7 +150,7 @@ related_clubs_are_ranked_by_overlap () {
   # Wait for both the stats cron (all 52 joins) and the overlap rebuild
   # (all 51 shared members) before issuing the GET that will be cached.
   wait_for "select 1 from club_stats where club_name = 'knitting' and (stats_json->>'member_count')::int = 52"
-  wait_for "select 1 from club_overlap where club_a = 'knitting' and club_b = 'crochet' and overlap = 51"
+  wait_for "select 1 from club_overlap where club_a = 'knitting' and club_b = 'crochet' and overlap = 51 and count_members_b = 51"
 
   result=$(c GET /club/knitting)
   [[ "$(jq -r '.related_clubs[0].name'          <<< "$result")" == "crochet" ]]

@@ -1872,6 +1872,8 @@ WITH is_allowed_club_name AS (
         (SELECT is_allowed_club_name FROM is_allowed_club_name)
     AND
         (SELECT x FROM will_be_within_club_quota)
+    AND
+        NOT EXISTS (SELECT 1 FROM club WHERE name = %(club_name)s)
     ON CONFLICT (name) DO NOTHING
     RETURNING
         name

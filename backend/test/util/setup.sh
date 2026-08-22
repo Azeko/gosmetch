@@ -158,6 +158,26 @@ j_assert_length () {
   [[ "$(echo "$1" | jq length)" -eq "$2" ]]
 }
 
+# Retry a command until its output equals the expected value. For eventually
+# consistent values like club member counts.
+# Example: assert_eventually "$expected_json" c GET '/search-clubs?q=my-club'
+assert_eventually () {
+  local expected=$1
+  shift
+
+  local result
+  for _ in $(seq 1 30); do
+    result=$(set +x; "$@")
+    [[ "$result" == "$expected" ]] && return 0
+    sleep 0.5
+  done
+
+  echo "assert_eventually timed out: $*" >&2
+  echo "last result: $result" >&2
+  echo "expected:    $expected" >&2
+  return 1
+}
+
 # Generate a random base64-encoded PNG image (WxH) for testing.
 # Example: img=$(rand_image)
 rand_image () {
