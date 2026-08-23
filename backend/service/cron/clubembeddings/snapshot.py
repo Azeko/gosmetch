@@ -1,11 +1,16 @@
+import logging
 import psycopg
 from typing import NamedTuple
+from serviceshared.duoenv.cron import CLUB_EMBEDDINGS_GRADIENT_STEPS
 from serviceshared.duoenv.shared import DB_HOST, DB_PASS, DB_PORT, DB_USER
 from serviceshared.pgvector import parse_pgvector, to_pgvector
 from service.cron.clubembeddings.ppmi import (
     club_embeddings_from_memberships,
     changed_embeddings,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class ComputedClubEmbeddings(NamedTuple):
@@ -15,6 +20,7 @@ class ComputedClubEmbeddings(NamedTuple):
 
 
 def compute_club_embeddings() -> ComputedClubEmbeddings:
+    logger.info('snapshot: loading memberships and previous embeddings')
     with psycopg.connect(
         host=DB_HOST,
         port=DB_PORT,
@@ -34,10 +40,14 @@ def compute_club_embeddings() -> ComputedClubEmbeddings:
         str(name): parse_pgvector(str(embedding))
         for name, embedding in previous_rows
     }
+    logger.info(
+        f'snapshot: loaded {len(memberships)} memberships and '
+        f'{len(previous)} previous embeddings')
 
     embeddings = club_embeddings_from_memberships(
         memberships=[(int(p), str(c)) for p, c in memberships],
         previous=previous,
+        steps=CLUB_EMBEDDINGS_GRADIENT_STEPS,
     )
 
     changed = changed_embeddings(embeddings, previous)
