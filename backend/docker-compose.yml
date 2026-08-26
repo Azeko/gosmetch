@@ -164,11 +164,16 @@ services:
 
     environment:
       initialBuckets: s3-mock-bucket, s3-mock-audio-bucket
+      root: /s3-data
+      retainFilesOnExit: "true"
       AWS_ACCESS_KEY_ID: s3-mock-access-key-id
       AWS_SECRET_ACCESS_KEY: s3-mock-secret-access-key-secret
 
     ports:
       - 9090:9090
+
+    volumes:
+      - s3mock_data:/s3-data
 
   smtp:
     image: mailhog/mailhog
@@ -222,6 +227,7 @@ services:
 volumes:
   postgres_test:
   postgres_prod:
+  s3mock_data:
 
 networks:
   default:
