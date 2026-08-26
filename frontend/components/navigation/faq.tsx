@@ -393,6 +393,73 @@ const FAQ_ITEMS: FaqItem[] = [
   },
 ];
 
+const FAQ_TRANSLATIONS: Record<string, {
+  question: string
+  answers: string[]
+}> = {
+  'Is ГосМэтч free?': {
+    question: 'ГосМэтч бесплатный?',
+    answers: [
+      'Да. Все могут бесплатно находить совпадения и общаться. Подписка для основных функций не нужна.',
+      'Поддержавшим нас участникам доступны дополнительные удобства: тёмная тема, расширенное оформление анкеты и другие привилегии.',
+    ],
+  },
+  'Is my profile private?': {
+    question: 'Моя анкета конфиденциальна?',
+    answers: [
+      'Да, если вы не решите иначе. Вашу анкету видят только вошедшие в ГосМэтч пользователи. Гости видят лишь анкеты с включённой настройкой «Публичная анкета».',
+      'Дополнительные ограничения доступны в разделе «Настройки конфиденциальности» на вкладке «Профиль».',
+    ],
+  },
+  'Are pics of myself required on my profile?': {
+    question: 'Нужны ли в анкете мои фотографии?',
+    answers: [
+      'Нет, но остальные сведения, например возраст и пол, должны быть достоверными. Аватары разрешены, а фотографии других людей, которых могут принять за вас, — нет.',
+      'Там, где закон требует проверки возраста, селфи загружается через систему верификации, а не в анкету.',
+    ],
+  },
+  'What’s the gender ratio on ГосМэтч?': {
+    question: 'Каково соотношение полов в ГосМэтч?',
+    answers: ['Соотношение активных мужчин и женщин меняется в зависимости от того, в каких интернет-сообществах недавно обсуждали ГосМэтч; раньше оно доходило примерно до 20:1.'],
+  },
+  'What are ГосМэтч clubs?': {
+    question: 'Что такое клубы ГосМэтч?',
+    answers: ['Клубы помогают знакомиться с людьми, которые разделяют ваши интересы или состоят в тех же сообществах. Вы можете создать свой клуб в приложении.'],
+  },
+  'How does the ГосМэтч matching algorithm work?': {
+    question: 'Как работает алгоритм подбора ГосМэтч?',
+    answers: ['За каждый ответ в большом тесте личности ГосМэтч показывает новое совпадение. Алгоритм учитывает личность, взгляды и привычки, а клубы помогают найти людей с общими интересами.'],
+  },
+  'Why is ГосМэтч telling me someone already used my intro?': {
+    question: 'Почему ГосМэтч говорит, что моё первое сообщение уже использовали?',
+    answers: ['Первое сообщение каждого диалога должно быть уникальным для всего ГосМэтч. Это поощряет вдумчивые и интересные знакомства. Все последующие сообщения могут быть любыми.'],
+  },
+  'Why does ГосМэтч use messages instead of likes to make matches?': {
+    question: 'Почему ГосМэтч использует сообщения, а не лайки?',
+    answers: ['Нам важно, чтобы с вами знакомились люди, которым вы действительно интересны. Написать вдумчивое сообщение сложнее, чем поставить лайк, поэтому ответ более вероятен. Общение бесплатно.'],
+  },
+  'Why does ГосМэтч match me with similar people? I thought opposites attract!': {
+    question: 'Почему ГосМэтч подбирает похожих на меня людей? Ведь противоположности притягиваются!',
+    answers: ['Люди могут отличаться в одних чертах, но при этом чаще выбирают партнёров с похожими взглядами и личностью. Поэтому алгоритм ищет совместимых, а не просто противоположных людей.'],
+  },
+  'How many personality questions does ГосМэтч have?': {
+    question: 'Сколько вопросов о личности есть в ГосМэтч?',
+    answers: ['В тесте личности ГосМэтч 2005 вопросов — как серьёзных, так и забавных. Даже ответы на необычные вопросы коррелируют с серьёзными и помогают оценить совместимость.'],
+  },
+  'How old do I need to be to use ГосМэтч?': {
+    question: 'С какого возраста можно пользоваться ГосМэтч?',
+    answers: ['ГосМэтч предназначен строго для людей от 18 лет. Не публикуйте фотографии детей без сопровождения или без одежды, даже если это ваши старые снимки. Анкета должна быть приемлемой для просмотра на работе.'],
+  },
+  'How do I get verified on ГосМэтч?': {
+    question: 'Как пройти верификацию в ГосМэтч?',
+    answers: ['Для проверки фотографий добавьте в анкету снимки с вашим лицом и пройдите процесс верификации. Для проверки основных сведений лицо в анкете необязательно, но понадобится отдельный снимок для анализа.'],
+  },
+  'What platforms is ГосМэтч available on?': {
+    question: 'На каких платформах доступен ГосМэтч?',
+    answers: ['ГосМэтч доступен как веб-приложение, а также в Google Play и App Store.'],
+  },
+};
+
 const FaqDetails = ({ question, Answer, isFirst }: FaqItem & {
   isFirst: boolean
 }) => {
@@ -400,6 +467,7 @@ const FaqDetails = ({ question, Answer, isFirst }: FaqItem & {
   const textStyle = useTextStyle();
   const [isOpen, setIsOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const translation = FAQ_TRANSLATIONS[question];
 
   return (
     <details
@@ -432,7 +500,7 @@ const FaqDetails = ({ question, Answer, isFirst }: FaqItem & {
             fontFamily: 'MontserratSemiBold',
           }}
         >
-          {question}
+          {translation?.question ?? question}
         </h3>
         <Ionicons
           style={{ color: appTheme.hintColor, fontSize: 18 }}
@@ -448,7 +516,10 @@ const FaqDetails = ({ question, Answer, isFirst }: FaqItem & {
           paddingBottom: 16,
         }}
       >
-        <Answer/>
+        {translation
+          ? translation.answers.map((answer, index) =>
+              <Paragraph key={index}>{answer}</Paragraph>)
+          : <Answer/>}
       </div>
     </details>
   );
@@ -490,20 +561,19 @@ const Faq = () => {
       }}
     >
       <ScrollView>
-        <SectionHeading isFirst={true}>Touch grass? No.</SectionHeading>
+        <SectionHeading isFirst={true}>Хватит трогать траву.</SectionHeading>
 
         <div style={{ padding: '0 16px 14px' }}>
           <Paragraph>
-            <Bold>Touch hearts.</Bold> Match with femcels, femboys, NEETs,
-            gymcels, /lit/ pseudointellectuals, and that one person who’s also
-            weirdly into trains. 100% free messaging and matching because
-            monetizing loneliness is cringe and we’re broke too. Your body
-            pillow had a good run. Now it’s time to romance someone who says
-            “based” back.
+            <Bold>Трогайте сердца.</Bold> Знакомьтесь с фемцелами, фембоями,
+            NEET, гимцелами, /lit/-псевдоинтеллектуалами и тем самым человеком,
+            который тоже странно увлечён поездами. Сообщения и совпадения на 100% бесплатны:
+            монетизировать одиночество кринжово, да и мы тоже без денег. Ваша дакимакура отслужила своё.
+            Пора завести роман с тем, кто ответит «база».
           </Paragraph>
         </div>
 
-        <SectionHeading>Frequently asked questions</SectionHeading>
+        <SectionHeading>Часто задаваемые вопросы</SectionHeading>
 
         <div style={{ paddingLeft: 16, paddingRight: 16 }}>
           {FAQ_ITEMS.map((faqItem, i) =>
