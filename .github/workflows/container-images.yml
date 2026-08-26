@@ -1,0 +1,86 @@
+name: Container images
+
+on:
+  push:
+    branches: [main]
+    paths: [backend/**, frontend/**, .github/workflows/container-images.yml]
+  pull_request:
+    branches: [main]
+    paths: [backend/**, frontend/**, .github/workflows/container-images.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: api, context: backend, dockerfile: backend/api.Dockerfile}
+          - {name: cron, context: backend, dockerfile: backend/cron.Dockerfile}
+          - {name: firehol, context: backend, dockerfile: backend/firehol.Dockerfile}
+          - {name: postgres, context: backend, dockerfile: backend/postgres.Dockerfile}
+          - {name: status, context: backend, dockerfile: backend/status.Dockerfile}
+          - {name: frontend, context: frontend, dockerfile: frontend/Dockerfile, target: production}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Validate registry configuration
+        if: github.event_name != 'pull_request'
+        env:
+          REGISTRY: ${{ vars.CONTAINER_REGISTRY }}
+          PREFIX: ${{ vars.CONTAINER_IMAGE_PREFIX }}
+          USERNAME: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          PASSWORD: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+        run: |
+          test -n "$REGISTRY" || { echo 'CONTAINER_REGISTRY is required'; exit 1; }
+          test -n "$PREFIX" || { echo 'CONTAINER_IMAGE_PREFIX is required'; exit 1; }
+          test -n "$USERNAME" || { echo 'CONTAINER_REGISTRY_USERNAME is required'; exit 1; }
+          test -n "$PASSWORD" || { echo 'CONTAINER_REGISTRY_PASSWORD is required'; exit 1; }
+
+      - name: Log in to the registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.CONTAINER_REGISTRY }}
+          username: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.CONTAINER_REGISTRY || 'registry.invalid' }}/${{ vars.CONTAINER_IMAGE_PREFIX || 'gosmetch' }}/${{ matrix.name }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=test
+          labels: |
+            org.opencontainers.image.title=gosmetch-${{ matrix.name }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and optionally push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: DUO_COMMIT_HASH=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Record published digest
+        if: github.event_name != 'pull_request'
+        run: echo "${{ matrix.name }} ${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
