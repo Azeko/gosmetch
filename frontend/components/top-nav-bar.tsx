@@ -3,9 +3,8 @@ import {
   ViewStyle,
 } from 'react-native';
 import { StatusBarSpacer } from './status-bar-spacer';
-import { DefaultText } from './default-text';
-import { Logo16 } from './logo';
 import { isMobile } from '../util/util';
+import { BrandLogo } from './brand-logo';
 import { useAppTheme } from '../app-theme/app-theme';
 
 const TopNavBar = (props: {
@@ -50,14 +49,7 @@ const DuoliciousTopNavBar = (props: {
   textColor?: string,
   children?: React.ReactNode,
 }) => {
-  const {
-    style,
-    backgroundColor,
-    textColor,
-    children,
-  } = props;
-
-  const { appTheme } = useAppTheme();
+  const { style, backgroundColor, children } = props;
 
   if (!isMobile() && !children) {
     return <View style={{ height: 10 }} />;
@@ -75,20 +67,7 @@ const DuoliciousTopNavBar = (props: {
       backgroundColor={backgroundColor}
     >
       {isMobile() && <>
-        <Logo16
-          size={16 * 2}
-          color={appTheme.brandColor}
-          rectSize={0.35}
-        />
-        <DefaultText
-          style={{
-            fontFamily: 'TruenoBold',
-            color: textColor ?? appTheme.brandColor,
-            fontSize: 22,
-          }}
-        >
-          Duolicious
-        </DefaultText>
+        <BrandLogo size={40} />
         </>
       }
       {children}

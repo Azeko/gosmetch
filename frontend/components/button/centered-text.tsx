@@ -121,7 +121,7 @@ const ButtonWithCenteredText = (props: ButtonWithCenteredTextProps) => {
           borderRadius: 999,
           borderColor: borderColor === undefined ? 'black' : borderColor,
           borderWidth: borderWidth === undefined ? (secondary ? 1 : 0) : borderWidth,
-          backgroundColor: backgroundColor || (secondary ? appTheme.primaryColor : '#70f'),
+          backgroundColor: backgroundColor || (secondary ? appTheme.primaryColor : '#1769aa'),
           opacity: animatedOpacity,
           alignItems: 'center',
           justifyContent: 'center',
@@ -130,7 +130,7 @@ const ButtonWithCenteredText = (props: ButtonWithCenteredTextProps) => {
         {loading &&
           <LogoActivityIndicator
             size="large"
-            color={textColor || (secondary ? "#70f" : appTheme.primaryColor)}
+            color={textColor || (secondary ? "#1769aa" : appTheme.primaryColor)}
           />
         }
         {!loading && children &&

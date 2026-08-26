@@ -39,7 +39,7 @@ const SelectedClub = ({
 }) => {
   const { appThemeName } = useAppTheme();
 
-  const textColor = appThemeName === 'dark' ? '#ffffff' : '#7700ff';
+  const textColor = appThemeName === 'dark' ? '#ffffff' : '#1769aa';
 
   return (
     <Pressable
@@ -56,8 +56,8 @@ const SelectedClub = ({
         // border taking the chip's text color
         style={{
           backgroundColor: appThemeName === 'dark'
-            ? 'rgba(119, 0, 255, 1.0)'
-            : 'rgba(119, 0, 255, 0.1)',
+            ? 'rgba(23, 105, 170, 1.0)'
+            : 'rgba(23, 105, 170, 0.1)',
           flexShrink: 1,
           borderBottomWidth: 3,
           borderColor: textColor,

@@ -65,7 +65,7 @@ const IndeterminateProgressBar = (props: { show?: boolean }) => {
         opacity: interpolatedOpacity,
         width: '10%',
         height: '100%',
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
       }} />
     </View>
   );

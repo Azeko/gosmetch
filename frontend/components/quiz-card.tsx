@@ -66,7 +66,7 @@ const LeftComponent = ({count}: {count: number}) => {
         position: 'absolute',
         right: 0,
         top: '20%',
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         paddingTop: 10,
         paddingBottom: 10,
         paddingLeft: 20,
@@ -112,7 +112,7 @@ const RightComponent = ({count}: {count: number}) => {
         position: 'absolute',
         left: 0,
         top: '20%',
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         paddingTop: 10,
         paddingBottom: 10,
         paddingLeft: 20,
@@ -393,7 +393,7 @@ const NonInteractiveQuizCard = ({children, ...props}: {
                     textAlign: 'right',
                   }}
                 >
-                  Duolicious
+                  ГосМэтч
                 </DefaultText>
                 <Logo14
                   size={14 * 2}
@@ -420,7 +420,7 @@ const NonInteractiveQuizCard = ({children, ...props}: {
             >
               {showTutorial && questionNumber === 1 &&
                 <DefaultText style={{fontSize: adjustedFontSize * 0.8}}>
-                  👋 Welcome to Duolicious Q&A, where we pick your brain in the
+                  👋 Welcome to ГосМэтч Q&A, where we pick your brain in the
                   quest to unearth your perfect match! Let's start with an easy
                   one:
                   {'\n\n'}
@@ -554,7 +554,7 @@ const AnswerIcon = ({
 
   const backgroundColor = (() => {
     if (selected === false) return appThemeName === 'dark' ? 'black' : 'white';
-    if (enabled) return '#70f';
+    if (enabled) return '#1769aa';
     return '#cabcff';
   })();
 

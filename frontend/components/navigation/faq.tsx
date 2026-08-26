@@ -119,7 +119,7 @@ const GenderStatsAnswer = () => {
         }. {}
       </>}
       The ratio can change a lot, depending on which online communities have
-      been talking about Duolicious lately; the ratio’s previously been as high
+      been talking about ГосМэтч lately; the ratio’s previously been as high
       as about 20:1 😱.
     </Paragraph>
     <Paragraph>
@@ -130,7 +130,7 @@ const GenderStatsAnswer = () => {
             <Bold>{nonBinaryPercentage.toFixed(1)}%</Bold>
         } of active members identify as non-binary. {}
       </>}
-      Duolicious has the following non-binary gender options:
+      ГосМэтч has the following non-binary gender options:
     </Paragraph>
     <BulletList>
       {'Agender'}
@@ -147,10 +147,10 @@ const GenderStatsAnswer = () => {
 
 const FAQ_ITEMS: FaqItem[] = [
   {
-    question: 'Is Duolicious free?',
+    question: 'Is ГосМэтч free?',
     Answer: () => <>
       <Paragraph>
-        Yes, everyone on Duolicious can match and message people completely for
+        Yes, everyone on ГосМэтч can match and message people completely for
         free – no payment required. Everyone gets the same access to matches and
         messages without a subscription. In fact, all our core features are 100%
         free.
@@ -166,7 +166,7 @@ const FAQ_ITEMS: FaqItem[] = [
     question: 'Is my profile private?',
     Answer: () => <>
       <Paragraph>
-        Yes, unless you say otherwise! Only people signed into Duolicious can
+        Yes, unless you say otherwise! Only people signed into ГосМэтч can
         see your profile. The profiles that signed-out visitors can browse
         belong to members who turned on the optional ‘Public Profile’ setting,
         which is off by default.
@@ -195,15 +195,15 @@ const FAQ_ITEMS: FaqItem[] = [
     </>,
   },
   {
-    question: 'What’s the gender ratio on Duolicious?',
+    question: 'What’s the gender ratio on ГосМэтч?',
     Answer: GenderStatsAnswer,
   },
   {
-    question: 'What are Duolicious clubs?',
+    question: 'What are ГосМэтч clubs?',
     Answer: () => <>
       <Paragraph>
         If you want to date people who share your interests, or date people
-        from your communities, Duolicious clubs are the way. Current clubs
+        from your communities, ГосМэтч clubs are the way. Current clubs
         include:
       </Paragraph>
       <BulletList>
@@ -225,13 +225,13 @@ const FAQ_ITEMS: FaqItem[] = [
     </>,
   },
   {
-    question: 'How does the Duolicious matching algorithm work?',
+    question: 'How does the ГосМэтч matching algorithm work?',
     Answer: () => <>
       <Paragraph>
-        Duolicious gives you a new match for each answer you give to our fun
+        ГосМэтч gives you a new match for each answer you give to our fun
         (and ginormous) personality quiz. We ask a bunch of questions about
         your personality, political alignment, habits, and so on. Based on
-        those answers, Duolicious simply matches you with people similar to
+        those answers, ГосМэтч simply matches you with people similar to
         you. If you’re curious to know more, we go in depth in our {}
         <Link href="https://duolicious.app/blog/psychoanalysing-chatgpt-using-statistics-to-make-a-decent-dating-app/">
           blog article
@@ -239,18 +239,18 @@ const FAQ_ITEMS: FaqItem[] = [
         {} (including a bunch of math).
       </Paragraph>
       <Paragraph>
-        As well as matching by personality, Duolicious has <Bold>Clubs</Bold> to
+        As well as matching by personality, ГосМэтч has <Bold>Clubs</Bold> to
         help you find people who have the same interests, or who are in the
         same communities.
       </Paragraph>
     </>,
   },
   {
-    question: 'Why is Duolicious telling me someone already used my intro?',
+    question: 'Why is ГосМэтч telling me someone already used my intro?',
     Answer: () => <>
       <Paragraph>
-        Duolicious is a dating app where opening messages need to be
-        one-of-a-kind! That means if anyone on Duolicious already started a
+        ГосМэтч is a dating app where opening messages need to be
+        one-of-a-kind! That means if anyone on ГосМэтч already started a
         conversation by using “hi”, then everyone on the app who opens a
         conversation after that will have to pick a different intro. We think
         having totally unique openers is a fun way to encourage thoughtful
@@ -264,7 +264,7 @@ const FAQ_ITEMS: FaqItem[] = [
     </>,
   },
   {
-    question: 'Why does Duolicious use messages instead of likes to make matches?',
+    question: 'Why does ГосМэтч use messages instead of likes to make matches?',
     Answer: () => <>
       <Paragraph>
         We want you to date people genuinely interested in you. Because
@@ -273,14 +273,14 @@ const FAQ_ITEMS: FaqItem[] = [
         you is sincerely interested in getting to know you!
       </Paragraph>
       <Paragraph>
-        Messaging on Duolicious is totally free. So to make sure you get
+        Messaging on ГосМэтч is totally free. So to make sure you get
         thoughtful intros, we require senders to write an intro we’ve never
         seen before!
       </Paragraph>
     </>,
   },
   {
-    question: 'Why does Duolicious match me with similar people? I thought opposites attract!',
+    question: 'Why does ГосМэтч match me with similar people? I thought opposites attract!',
     Answer: () => <>
       <Paragraph>
         Opposites do attract in some sense—That’s called {}
@@ -316,10 +316,10 @@ const FAQ_ITEMS: FaqItem[] = [
     </>,
   },
   {
-    question: 'How many personality questions does Duolicious have?',
+    question: 'How many personality questions does ГосМэтч have?',
     Answer: () => <>
       <Paragraph>
-        Duolicious has a personality test containing 2005 questions. Even
+        ГосМэтч has a personality test containing 2005 questions. Even
         though our dating quiz is pretty in-depth, we made sure not to
         sacrifice fun, so we’ve got some good ones like these:
       </Paragraph>
@@ -341,21 +341,21 @@ const FAQ_ITEMS: FaqItem[] = [
     </>,
   },
   {
-    question: 'How old do I need to be to use Duolicious?',
+    question: 'How old do I need to be to use ГосМэтч?',
     Answer: () => <>
       <Paragraph>
-        Duolicious is strictly for people 18 years of age and older.
+        ГосМэтч is strictly for people 18 years of age and older.
         Additionally, this means no photos of children who are either on
         their own or unclothed, even if they’re old photos of yourself.
       </Paragraph>
       <Paragraph>
-        Even though Duolicious is for adults, we still ask you to keep your
+        Even though ГосМэтч is for adults, we still ask you to keep your
         profile safe-for-work. 🙏
       </Paragraph>
     </>,
   },
   {
-    question: 'How do I get verified on Duolicious?',
+    question: 'How do I get verified on ГосМэтч?',
     Answer: () => <>
       <Paragraph>
         To verify your <Italic>photos</Italic> you need to upload pictures to
@@ -375,10 +375,10 @@ const FAQ_ITEMS: FaqItem[] = [
     </>,
   },
   {
-    question: 'What platforms is Duolicious available on?',
+    question: 'What platforms is ГосМэтч available on?',
     Answer: () => <>
       <Paragraph>
-        Duolicious is available via our web app, which you’re using right
+        ГосМэтч is available via our web app, which you’re using right
         now. You can also download the app on {}
         <Link href="https://play.google.com/store/apps/details?id=app.duolicious">
           Google Play

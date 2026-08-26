@@ -90,7 +90,7 @@ const DateOfBirthConfirmationModal = () => {
           </DefaultText>
           <ButtonWithCenteredText
             onPress={onConfirm}
-            backgroundColor="#7700ff"
+            backgroundColor="#1769aa"
             textStyle={{ color: 'white', fontWeight: '700' }}
           >
             Yes, I’m {age}

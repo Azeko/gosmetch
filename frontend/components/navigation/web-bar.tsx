@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import {
   Pressable,
-  Text,
   View,
   ScrollView,
 } from 'react-native';
 import { DefaultText } from '../default-text';
 import { CommonActions } from '@react-navigation/native';
 import type { WebBarProps } from './web-navigator';
-import { Logo16 } from '../logo';
+import { BrandLogo } from '../brand-logo';
 import { LabelToIcon } from './util';
 import { useInboxStats } from '../../chat/application-layer/hooks/inbox-stats';
 import { WebBarFooter } from './web-bar-footer/web-bar-footer';
@@ -26,26 +25,7 @@ const Logo = () => {
         gap: 6,
       }}
     >
-      <View
-        style={{
-          width: 60,
-          alignItems: 'center',
-        }}
-      >
-        <Logo16/>
-      </View>
-      <Text
-        style={{
-          color: 'white',
-          alignSelf: 'center',
-          fontFamily: 'TruenoBold',
-          fontSize: 22,
-          textAlign: 'center',
-        }}
-        selectable={false}
-      >
-        Duolicious
-      </Text>
+      <BrandLogo size={92} />
     </View>
   );
 };
@@ -82,7 +62,7 @@ const NavigationItems = ({state, navigation, descriptors}:
           if (appThemeName === 'dark') {
             return isFocused ?  '#ffffff' : '#000000';
           } else {
-            return isFocused ?  '#ffffff' : '#7700ff';
+            return isFocused ?  '#ffffff' : '#1769aa';
           }
         })();
 
@@ -94,7 +74,7 @@ const NavigationItems = ({state, navigation, descriptors}:
             return '#ffffff4d';
           }
 
-          return appThemeName === 'dark' ? '#000000' : '#7700ff';
+          return appThemeName === 'dark' ? '#000000' : '#1769aa';
         })();
 
         return (
@@ -182,7 +162,7 @@ const WebBar = ({state, navigation, tabBarStyle, descriptors}: WebBarProps) => {
     <ScrollView
       style={{
         height: '100%',
-        backgroundColor: appThemeName === 'dark' ? 'black' : '#70f',
+        backgroundColor: appThemeName === 'dark' ? 'black' : '#1769aa',
         borderRightWidth: 5,
         borderColor: 'black',
       }}

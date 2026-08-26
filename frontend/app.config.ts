@@ -5,6 +5,7 @@ import { ConfigPlugin, withEntitlementsPlist } from 'expo/config-plugins';
 // import { ExpoConfig } from '@expo/config-types';
 
 const DEEP_LINK_HOSTNAME = 'get.duolicious.app';
+const BRAND_BLUE = '#1769aa';
 const IS_LOCAL_IOS_DEV = process.env.DUO_LOCAL_IOS_DEV === '1';
 
 const withoutPaidAppleCapabilities: ConfigPlugin = (config) =>
@@ -16,7 +17,7 @@ const withoutPaidAppleCapabilities: ConfigPlugin = (config) =>
   });
 
 const config: ExpoConfig = {
-  name: 'Duolicious',
+  name: 'ГосМэтч',
   slug: 'duolicious',
   // Registers an intent filter for `app.duolicious://` so Android can
   // dispatch the Google OAuth redirect (`app.duolicious:/oauthredirect`)
@@ -25,7 +26,7 @@ const config: ExpoConfig = {
   scheme: 'app.duolicious',
   version: "32.9.5",
   orientation: "portrait",
-  icon: './assets/icon.png',
+  icon: './assets/gosmetch-logo-square.png',
   updates: {
     fallbackToCacheTimeout: 0
   },
@@ -61,7 +62,7 @@ const config: ExpoConfig = {
     deepLinkHostname: DEEP_LINK_HOSTNAME,
   },
   web: {
-    favicon: "./assets/favicon.png"
+    favicon: "./assets/gosmetch-logo-square.png"
   },
   ios: {
     bundleIdentifier: process.env.DUO_IOS_BUNDLE_IDENTIFIER ?? "app.duolicious",
@@ -88,8 +89,8 @@ const config: ExpoConfig = {
     googleServicesFile: "./google-services.json",
     package: "app.duolicious",
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#7700ff"
+      foregroundImage: "./assets/gosmetch-logo-square.png",
+      backgroundColor: BRAND_BLUE
     },
     intentFilters: [
       {
@@ -118,7 +119,7 @@ const config: ExpoConfig = {
       "expo-notifications",
       {
         "icon": "./assets/notification.png",
-        "color": "#7700ff",
+        "color": BRAND_BLUE,
         "sounds": [
           "./assets/audio/notification.mp3"
         ]
@@ -127,8 +128,8 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#7700ff",
-        image: "./assets/splash.png",
+        backgroundColor: BRAND_BLUE,
+        image: "./assets/gosmetch-logo-square.png",
         imageWidth: 300,
       }
     ],

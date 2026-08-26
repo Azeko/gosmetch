@@ -4,7 +4,6 @@ import {
   Linking,
   Platform,
   Pressable,
-  Text,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -41,7 +40,8 @@ import {
 import { applyAuthenticatedResponse } from '../api/auth';
 import { socialAccountOptionGroups } from '../data/option-groups';
 import { sessionToken } from '../kv-storage/session-token';
-import { Logo16 } from './logo';
+import { BrandLogo } from './brand-logo';
+import { BRAND_BLUE } from '../brand/brand';
 import { KeyboardDismissingView } from './keyboard-dismissing-view';
 import { otpDestination } from '../App';
 import { useSignedInUser } from '../events/signed-in-user';
@@ -97,7 +97,7 @@ const ActiveMembers = ({
   numActiveMembers,
   minActiveMembers,
   color,
-  minText = 'on the Duolicious dating app',
+  minText = 'on the ГосМэтч dating app',
 }: {
   numActiveMembers: number,
   minActiveMembers: number
@@ -174,7 +174,7 @@ const WelcomeScreen = () => {
       style={{
         width: '100%',
         height: '100%',
-        backgroundColor: '#70f',
+        backgroundColor: BRAND_BLUE,
         overflow: 'hidden',
       }}
     >
@@ -324,7 +324,7 @@ const InviteScreen = ({navigation, route}: NativeStackScreenProps<RootParamList,
   return (
     <SafeAreaView
       style={{
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         width: '100%',
         height: '100%',
       }}
@@ -347,18 +347,7 @@ const InviteScreen = ({navigation, route}: NativeStackScreenProps<RootParamList,
             gap: 1,
           }}
         >
-          <Logo16 size={32} rectSize={0.3} />
-          <Text
-            style={{
-              color: 'white',
-              alignSelf: 'center',
-              fontFamily: 'TruenoBold',
-              fontSize: 20,
-            }}
-            selectable={false}
-          >
-            Duolicious
-          </Text>
+          <BrandLogo size={72} />
         </View>
         <View
           style={{
@@ -584,18 +573,7 @@ const LogoHeader = () => (
       gap: 1,
     }}
   >
-    <Logo16 size={32} rectSize={0.3} doAnimate={true} />
-    <Text
-      style={{
-        color: 'white',
-        alignSelf: 'center',
-        fontFamily: 'TruenoBold',
-        fontSize: 20,
-      }}
-      selectable={false}
-    >
-      Duolicious
-    </Text>
+    <BrandLogo size={96} />
   </View>
 );
 
@@ -630,7 +608,7 @@ const Hero = ({
         }}
       >
         {clubName ?
-          `Join ${clubName} on Duolicious` :
+          `Join ${clubName} on ГосМэтч` :
           'Cute dates & dank memes await...'}
       </DefaultText>
     }
@@ -699,7 +677,7 @@ const finishSocialSignIn = async ({
       response.status === 429 ? 'You’re doing that too much' :
       response.status === 460 ? 'Network blocked. Are you using a VPN?' :
       response.status === 461 ? 'Your account is banned' :
-      'We couldn’t connect to Duolicious'
+      'We couldn’t connect to ГосМэтч'
     );
     return;
   }
@@ -720,7 +698,7 @@ const finishSocialSignIn = async ({
       showSkipButton: false,
       showCloseButton: false,
       showBackButton: true,
-      backgroundColor: '#7700ff',
+      backgroundColor: '#1769aa',
       color: '#ffffff',
     });
     navigation.navigate('Create Account Or Sign In Screen');
@@ -841,7 +819,7 @@ const WelcomeScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParam
   return (
     <SafeAreaView
       style={{
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         width: '100%',
         height: '100%',
         flexDirection: 'row',
@@ -996,7 +974,7 @@ const EmailScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParamLi
         showSkipButton: false,
         showCloseButton: false,
         showBackButton: true,
-        backgroundColor: '#7700ff',
+        backgroundColor: '#1769aa',
         color: '#ffffff',
       });
       navigation.navigate('Create Account Or Sign In Screen');
@@ -1006,7 +984,7 @@ const EmailScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParamLi
         response.status === 429 ? 'You’re doing that too much' :
         response.status === 460 ? 'Network blocked. Are you using a VPN?' :
         response.status === 461 ? 'Your account is banned' :
-        'We couldn’t connect to Duolicious'
+        'We couldn’t connect to ГосМэтч'
       );
     }
   };
@@ -1021,11 +999,11 @@ const EmailScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParamLi
         marginBottom: 0,
         height: undefined,
       }}
-      backgroundColor="rgb(228, 204, 255)"
+      backgroundColor="rgb(209, 225, 238)"
       textStyle={{
         padding: 10,
         fontSize: 12,
-        color: '#70f',
+        color: '#1769aa',
       }}
     >
       {suffix}
@@ -1040,7 +1018,7 @@ const EmailScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParamLi
     <SafeAreaView
       edges={['bottom', 'left', 'right']}
       style={{
-        backgroundColor: '#7700ff',
+        backgroundColor: '#1769aa',
         width: '100%',
         height: '100%',
       }}

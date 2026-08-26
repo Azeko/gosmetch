@@ -131,7 +131,7 @@ const Offering = ({
             justifyContent: 'center',
           }}
         >
-          <LogoActivityIndicator size="large" color="#70f"/>
+          <LogoActivityIndicator size="large" color="#1769aa"/>
         </View>
         <Close onPress={onPressClose} />
       </>
@@ -214,7 +214,7 @@ const Offering = ({
                 fontSize: 16,
               }}
             >
-              Duolicious
+              ГосМэтч
             </DefaultText>
           </View>
           {!isCompact &&
@@ -239,7 +239,7 @@ const Offering = ({
       </View>
       <View
         style={{
-          backgroundColor: '#70f',
+          backgroundColor: '#1769aa',
           borderRadius: 10,
           overflow: 'hidden',
           borderWidth: 3,
@@ -291,7 +291,7 @@ const Offering = ({
 
           <DefaultText
             style={{
-              color: '#70f',
+              color: '#1769aa',
               fontWeight: 700,
               fontSize: 12,
               paddingHorizontal: 7,

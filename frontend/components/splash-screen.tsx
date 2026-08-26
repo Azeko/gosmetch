@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Animated } from 'react-native';
-import { Logo16 } from './logo';
+import { BrandLogo } from './brand-logo';
+import { BRAND_BLUE } from '../brand/brand';
 
 const SplashScreen = ({ loading }: { loading: boolean }) => {
   const [isFaded, setIsFaded] = useState(false);
@@ -30,12 +31,12 @@ const SplashScreen = ({ loading }: { loading: boolean }) => {
           alignItems: 'center',
           flexDirection: 'column',
           justifyContent: 'space-around',
-          backgroundColor: '#70f',
+          backgroundColor: BRAND_BLUE,
           opacity: opacity,
           zIndex: 999,
         }}
       >
-        <Logo16 size={96} fadeOutDelay={0} fadeInDelay={0} doAnimate={true} />
+        <BrandLogo size={180} />
       </Animated.View>
     );
   }

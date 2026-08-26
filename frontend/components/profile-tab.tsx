@@ -859,8 +859,8 @@ const AboutDuolicious = () => {
           color: '#999',
         }}
       >
-        Duolicious is free software licensed under the AGPLv3. The source code
-        used to make Duolicious is available {}
+        ГосМэтч is free software licensed under the AGPLv3. The source code
+        used to make ГосМэтч is available {}
         <DefaultText style={{fontWeight: '600', color: '#37f'}}>
           here
         </DefaultText>
@@ -917,7 +917,7 @@ const AboutDuolicious = () => {
             color: '#999',
           }}
         >
-          Duolicious Web Version {WEB_VERSION}
+          ГосМэтч Web Version {WEB_VERSION}
         </DefaultText>
       }
     </View>

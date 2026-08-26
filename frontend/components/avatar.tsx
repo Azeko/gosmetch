@@ -162,7 +162,7 @@ const Avatar = ({
             borderRadius: 999,
             borderColor: appTheme.primaryColor,
             borderWidth: 2,
-            backgroundColor: '#70f',
+            backgroundColor: '#1769aa',
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
@@ -204,7 +204,7 @@ const Avatar = ({
           }}
         >
           <X
-            stroke="#70f"
+            stroke="#1769aa"
             strokeWidth={3}
             height={48}
             width={48}

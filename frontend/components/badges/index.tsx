@@ -27,7 +27,7 @@ const durationColor = '#ff6bfa';
 const Staff = ({
   label,
   tip,
-  color = '#70f',
+  color = '#1769aa',
 }: {
   label: string,
   tip: string,
@@ -71,11 +71,11 @@ const Staff = ({
   );
 };
 
-const Admin = () => <Staff label="admin" tip="Duolicious administrator" />;
+const Admin = () => <Staff label="admin" tip="ГосМэтч administrator" />;
 
-const Bot = () => <Staff label="bot" tip="Duolicious bot" />;
+const Bot = () => <Staff label="bot" tip="ГосМэтч bot" />;
 
-const Mod = () => <Staff label="mod" tip="Duolicious moderator" color="black" />;
+const Mod = () => <Staff label="mod" tip="ГосМэтч moderator" color="black" />;
 
 const Gold = ({
   style = {},
@@ -92,7 +92,7 @@ const Gold = ({
     <View
       ref={viewRef}
       style={{
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         borderRadius: 999,
         alignItems: 'center',
         justifyContent: 'center',
@@ -435,7 +435,7 @@ const LongBio = () => <BaseLongBio numLoops={3} />;
 
 const EarlyAdopter = () => {
   const { viewRef, props } = useTooltip(
-    `Joined Duolicious in its first year`
+    `Joined ГосМэтч in its first year`
   );
 
   return (

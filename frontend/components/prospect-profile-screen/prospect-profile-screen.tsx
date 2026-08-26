@@ -539,7 +539,7 @@ const BlockButton = ({name, personUuid, backgroundColor}: {
       })}
     >
       {isPosting &&
-        <LogoActivityIndicator size="small" color="#70f"/>
+        <LogoActivityIndicator size="small" color="#1769aa"/>
       }
       {!isLoading && isSkipped &&
         <RotateCcw
@@ -935,7 +935,7 @@ const CurriedContent = ({navigationRef, navigation, route}: ProspectScreenProps 
 
   // Surface the prospect's name in the browser tab. We prefer the freshly
   // fetched name but fall back to the optimistic hint while the API is in
-  // flight so the title doesn't briefly read "Duolicious" before snapping
+  // flight so the title doesn't briefly read "ГосМэтч" before snapping
   // to the name. App.tsx's `documentTitle.formatter` reads `options.title`.
   const screenTitle = data?.name ?? getProspectHint(handle)?.name;
   useLayoutEffect(() => {
@@ -1065,7 +1065,7 @@ const CurriedContent = ({navigationRef, navigation, route}: ProspectScreenProps 
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: '#70f',
+            backgroundColor: '#1769aa',
             paddingHorizontal: 30,
             gap: 14,
           }}

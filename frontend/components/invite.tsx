@@ -96,7 +96,7 @@ const InvitePicker = ({navigation}: NativeStackScreenProps<ProfileParamList, 'In
               flexGrow: 1,
             }}
           >
-            <LogoActivityIndicator size="large" color="#70f"/>
+            <LogoActivityIndicator size="large" color="#1769aa"/>
           </View>
         }
         {clubs !== undefined && clubs.length === 0 &&

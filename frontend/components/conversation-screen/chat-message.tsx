@@ -65,7 +65,7 @@ import {
 } from '../modal/emoji-picker-modal';
 import { MessageReceipt, ReceiptText } from './message-receipt';
 
-const currentUserBackgroundColor = '#70f';
+const currentUserBackgroundColor = '#1769aa';
 
 const defaultTextColor = 'black';
 
@@ -273,7 +273,7 @@ const MessageStatusComponent = ({
     'offensive': `Intros can’t be too rude. Try sending ${name} a different message.`,
     'age-verification': `Verification is required to chat.` + verificationMessageText,
     'blocked': name + ' is unavailable right now. Try messaging someone else!',
-    'not unique': `That intro’s been used ${usedCount === 1 ? 'once before' : `${formatCount(usedCount)} times`} on Duolicious. Send ${name} a unique message instead!`,
+    'not unique': `That intro’s been used ${usedCount === 1 ? 'once before' : `${formatCount(usedCount)} times`} on ГосМэтч. Send ${name} a unique message instead!`,
     'too long': 'That message is too big! 😩',
     'server-error': 'Our server went boom. Please contact support@duolicious.app',
   };

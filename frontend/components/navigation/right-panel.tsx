@@ -25,7 +25,7 @@ const DuoliciousRightPanelContent = () => {
     <View
       style={{
         borderRadius: 10,
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         width: '100%',
         padding: 20,
         gap: 20,
@@ -55,8 +55,8 @@ const DuoliciousRightPanelContent = () => {
         Do you have a Discord server, subreddit, forum, or other social group
         you want to promote? You can do it here, for free!
         {'\n\n'}
-        What’s the catch? You’ll have to promote Duolicious back. (Plus your
-        group should be something Duolicious members would like.)
+        What’s the catch? You’ll have to promote ГосМэтч back. (Plus your
+        group should be something ГосМэтч members would like.)
         {'\n\n'}
         Inquiries: {}
         <DefaultText
@@ -114,7 +114,7 @@ const SponsoredRightPanelContent = () => {
         <DefaultText style={{ fontWeight: '700' }}>
         {partner.name}
         </DefaultText>
-        {} is a Duolicious partner
+        {} is a ГосМэтч partner
       </DefaultText>
 
       <DefaultText style={{ textAlign: 'center' }}>

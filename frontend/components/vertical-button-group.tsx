@@ -41,7 +41,7 @@ const VerticalButtonGroup: React.FC<VerticalButtonGroupProps> = ({
               {
                 borderBottomColor: appTheme.interactiveBorderColor,
                 borderBottomWidth: isLast ? 0 : 1,
-                backgroundColor: isSelected ? '#70f' : appTheme.primaryColor,
+                backgroundColor: isSelected ? '#1769aa' : appTheme.primaryColor,
               },
             ]}
           >
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: '#70f',
+    backgroundColor: '#1769aa',
   },
   button: {
     height: 40,

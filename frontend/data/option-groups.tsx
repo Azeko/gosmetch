@@ -726,7 +726,7 @@ const orientationOptionGroup: OptionGroup<OptionGroupButtons> = {
 const lookingForOptionGroup: OptionGroup<OptionGroupButtons> = {
   title: 'Looking For',
   Icon: ({ color = 'black' }) => <Ionicons style={{fontSize: 16, color}} name="eye" />,
-  description: 'What are you mainly looking for on Duolicious?',
+  description: 'What are you mainly looking for on ГосМэтч?',
   input: {
     buttons: {
       values: lookingFor,
@@ -2149,7 +2149,7 @@ const privacySettingsOptionGroups: OptionGroup<OptionGroupInputs>[] = [
     ),
     description: () => (
       <DefaultText style={descriptionStyle.style}>
-        With this option set to ‘Yes’, people who aren’t signed into Duolicious
+        With this option set to ‘Yes’, people who aren’t signed into ГосМэтч
         can view your profile. While ‘Public Profile’ is ‘Yes’, it overrides
         ‘Verification Level’ and ‘Hide Me From Strangers’, so those settings
         won’t apply.
@@ -2242,7 +2242,7 @@ const privacySettingsOptionGroups: OptionGroup<OptionGroupInputs>[] = [
       return (
         <DefaultText style={descriptionStyle.style}>
           With this option set to ‘Yes’, people won’t see you in the feed,
-          search, or anywhere else in Duolicious until you message them first.
+          search, or anywhere else in ГосМэтч until you message them first.
           {!signedInUser?.hasGold && ' Unlock this feature with Gold.'}
         </DefaultText>
       )

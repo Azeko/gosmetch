@@ -436,7 +436,7 @@ const CurredInDepthScreen = ({navigationRef, navigation, route}: NativeStackScre
             alignItems: 'center',
           }}
         >
-          <LogoActivityIndicator size="large" color="#70f" />
+          <LogoActivityIndicator size="large" color="#1769aa" />
         </View>
       }
       {personId === undefined && fetchFailed &&
