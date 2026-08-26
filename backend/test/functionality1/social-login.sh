@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# Tests for /sign-in-with-google and /sign-in-with-apple. Relies on the
+# Tests for /sign-in-with-google and /sign-in-with-yandex. Relies on the
 # mocking-mode branch in auth/social.py — when
 # test/input/enable-mocking is '1' the API skips JWT signature checks
 # but still enforces iss/aud/exp, so we mint structurally-valid fake
-# tokens with `mint_google_token` / `mint_apple_token` from setup.sh.
+# tokens with `mint_google_token` / `mint_yandex_token` from setup.sh.
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 cd "$script_dir"
@@ -12,11 +12,6 @@ cd "$script_dir"
 source ../util/setup.sh
 
 set -xe
-
-# Default nonce shared by mint_apple_token and the /sign-in-with-apple
-# request bodies. The backend rejects an Apple sign-in whose JWT.nonce
-# doesn't match the nonce supplied alongside the token.
-NONCE="test-nonce-0000000000000000"
 
 reset_db () {
   local future
@@ -163,28 +158,27 @@ status=$(curl -s -o /dev/null -w "%{http_code}" \
 [[ "$(q "select count(*) from social_identity where provider_sub = 'google-sub-4'")" -eq 0 ]]
 
 # ---------------------------------------------------------------------------
-# 5. Apple basic sign-up.
+# 5. Yandex basic sign-up.
 # ---------------------------------------------------------------------------
 reset_db
 SESSION_TOKEN=""
 
-a_token=$(mint_apple_token --sub apple-sub-1 --email apple1@example.com)
-response=$(jc POST /sign-in-with-apple \
-  -d "{ \"identity_token\": \"${a_token}\", \"nonce\": \"${NONCE}\" }")
+y_token=$(mint_yandex_token --sub yandex-sub-1 --email yandex1@example.com)
+response=$(jc POST /sign-in-with-yandex \
+  -d "{ \"access_token\": \"${y_token}\" }")
 
 [[ "$(jq -r .onboarded         <<< "$response")" = false ]]
 [[ "$(jq -r .session_token     <<< "$response")" != null ]]
 SESSION_TOKEN=$(jq -r .session_token <<< "$response")
 
-[[ "$(q "select pending_social_provider from duo_session where pending_social_provider is not null")" = apple ]]
+[[ "$(q "select pending_social_provider from duo_session where pending_social_provider is not null")" = yandex ]]
 
 complete_onboarding_for_current_session
-apple1_id=$(get_id 'apple1@example.com')
-[[ "$(q "select count(*) from social_identity where provider = 'apple' and provider_sub = 'apple-sub-1' and person_id = $apple1_id")" -eq 1 ]]
+yandex1_id=$(get_id 'yandex1@example.com')
+[[ "$(q "select count(*) from social_identity where provider = 'yandex' and provider_sub = 'yandex-sub-1' and person_id = $yandex1_id")" -eq 1 ]]
 
 # ---------------------------------------------------------------------------
-# 6. Apple Hide-My-Email: privaterelay address never matches an existing
-#    OTP account, so the user goes through onboarding as new.
+# 6. Yandex auto-links a matching verified email.
 # ---------------------------------------------------------------------------
 # Pre-existing OTP user at a "real" address.
 SESSION_TOKEN=""
@@ -195,17 +189,13 @@ complete_onboarding_for_current_session
 real_id=$(get_id 'real@example.com')
 
 SESSION_TOKEN=""
-relay_token=$(mint_apple_token --sub apple-sub-relay --email abc.def@privaterelay.appleid.com)
-response=$(jc POST /sign-in-with-apple \
-  -d "{ \"identity_token\": \"${relay_token}\", \"nonce\": \"${NONCE}\" }")
+y_token=$(mint_yandex_token --sub yandex-sub-link --email real@example.com)
+response=$(jc POST /sign-in-with-yandex \
+  -d "{ \"access_token\": \"${y_token}\" }")
 
-# Did NOT auto-link to real@example.com.
-[[ "$(jq -r .onboarded <<< "$response")" = false ]]
-[[ "$(q "select count(*) from social_identity where person_id = $real_id")" -eq 0 ]]
-SESSION_TOKEN=$(jq -r .session_token <<< "$response")
-complete_onboarding_for_current_session
-relay_id=$(get_id 'abc.def@privaterelay.appleid.com')
-[[ "$relay_id" -ne "$real_id" ]]
+[[ "$(jq -r .onboarded <<< "$response")" = true ]]
+[[ "$(jq -r .person_id <<< "$response")" = "$real_id" ]]
+[[ "$(q "select count(*) from social_identity where provider = 'yandex' and person_id = $real_id")" -eq 1 ]]
 
 # ---------------------------------------------------------------------------
 # 7. Banned user (by email) → 461.
@@ -232,29 +222,23 @@ status=$(curl -s -o /dev/null -w "%{http_code}" \
   -d "{ \"id_token\": \"${bad_aud}\" }")
 [[ "$status" = "401" ]]
 
+# Yandex also rejects a token issued to another OAuth application.
+bad_yandex_aud=$(mint_yandex_token --sub x --email a@b.com --aud not-our-client-id)
+status=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X POST http://localhost:5000/sign-in-with-yandex \
+  -H "Content-Type: application/json" \
+  -d "{ \"access_token\": \"${bad_yandex_aud}\" }")
+[[ "$status" = "401" ]]
+
 # ---------------------------------------------------------------------------
-# 9. Bad issuer (Apple-shaped token to /sign-in-with-google) → 401.
+# 9. Bad issuer (Yandex-shaped token to /sign-in-with-google) → 401.
 # ---------------------------------------------------------------------------
-mismatched=$(mint_apple_token --sub x --email a@b.com)
+mismatched=$(mint_yandex_token --sub x --email a@b.com)
 status=$(curl -s -o /dev/null -w "%{http_code}" \
   -X POST http://localhost:5000/sign-in-with-google \
   -H "Content-Type: application/json" \
   -d "{ \"id_token\": \"${mismatched}\" }")
 [[ "$status" = "401" ]]
-
-# ---------------------------------------------------------------------------
-# 9b. Apple token whose JWT.nonce doesn't match the nonce the client says
-#     it asked for → 401. Protects against an attacker replaying a stolen
-#     id_token: even with a valid signature, the nonce binding fails.
-# ---------------------------------------------------------------------------
-reset_db
-a_token=$(mint_apple_token --sub apple-nonce-bad --email a@b.com --nonce someone-elses-nonce-aaaaaaaaa)
-status=$(curl -s -o /dev/null -w "%{http_code}" \
-  -X POST http://localhost:5000/sign-in-with-apple \
-  -H "Content-Type: application/json" \
-  -d "{ \"identity_token\": \"${a_token}\", \"nonce\": \"${NONCE}\" }")
-[[ "$status" = "401" ]]
-[[ "$(q "select count(*) from social_identity where provider_sub = 'apple-nonce-bad'")" -eq 0 ]]
 
 # ---------------------------------------------------------------------------
 # 10. Pending club join works on social sign-up.
@@ -273,50 +257,5 @@ SESSION_TOKEN=$(jq -r .session_token <<< "$response")
 complete_onboarding_for_current_session
 club_id=$(get_id 'club@example.com')
 [[ "$(q "select count(*) from person_club where person_id = $club_id and club_name = 'some-club'")" -eq 1 ]]
-
-# ---------------------------------------------------------------------------
-# 11. Apple OAuth callback (web/Android flow). The backend converts
-#     Apple's POST into a 302 carrying the id_token in a query param.
-#     `DUO_APPLE_*_REDIRECT_URL` in docker-compose.test.yml define the
-#     allowed targets.
-# ---------------------------------------------------------------------------
-expected_web_redirect="http://test-web.example/"
-expected_android_redirect="http://test-android.example/"
-
-# 11a. Web target: state = "<nonce>.web" → redirects to web URL with
-# id_token + state preserved. We don't trust curl's URL re-encoding for
-# the assertion, so just check the prefix and that both params are present.
-location=$(curl -s -o /dev/null -w "%{redirect_url}" \
-  -X POST http://localhost:5000/auth/apple/callback \
-  -d 'id_token=fake.id.token&state=abc123.web')
-[[ "$location" == "${expected_web_redirect}"* ]]
-[[ "$location" == *apple_id_token=fake.id.token* ]]
-[[ "$location" == *apple_state=abc123.web* ]]
-
-# 11b. Android target.
-location=$(curl -s -o /dev/null -w "%{redirect_url}" \
-  -X POST http://localhost:5000/auth/apple/callback \
-  -d 'id_token=fake.id.token&state=xyz789.android')
-[[ "$location" == "${expected_android_redirect}"* ]]
-[[ "$location" == *apple_id_token=fake.id.token* ]]
-
-# 11c. Unknown target in state → 400 (no open redirect).
-status=$(curl -s -o /dev/null -w "%{http_code}" \
-  -X POST http://localhost:5000/auth/apple/callback \
-  -d 'id_token=fake.id.token&state=abc123.evil')
-[[ "$status" = "400" ]]
-
-# 11d. Apple-reported error is forwarded to the client as a query param.
-location=$(curl -s -o /dev/null -w "%{redirect_url}" \
-  -X POST http://localhost:5000/auth/apple/callback \
-  -d 'state=abc123.web&error=user_cancelled_authorize')
-[[ "$location" == "${expected_web_redirect}"* ]]
-[[ "$location" == *apple_error=user_cancelled_authorize* ]]
-
-# 11e. Missing id_token (and no error) → forwarded as a generic error.
-location=$(curl -s -o /dev/null -w "%{redirect_url}" \
-  -X POST http://localhost:5000/auth/apple/callback \
-  -d 'state=abc123.web')
-[[ "$location" == *apple_error=missing_id_token* ]]
 
 echo "social-login.sh OK"

@@ -58,8 +58,8 @@ from service.api.person.aboutdiff import diff_addition_with_context
 from service.api.auth.session import sign_out, enforce_session_limit
 from service.api.auth.social import (
     SocialAuthError,
-    verify_apple_identity_token,
     verify_google_id_token,
+    verify_yandex_access_token,
 )
 from serviceshared.verification.messages import (
     V_QUEUED,
@@ -554,20 +554,19 @@ async def post_sign_in_with_google(
         remote_addr=remote_addr,
     )
 
-async def post_sign_in_with_apple(
+async def post_sign_in_with_yandex(
     *,
     token: str,
-    nonce: str,
     pending_club_name: str | None,
     remote_addr: str | None,
 ) -> object:
     try:
-        claims = verify_apple_identity_token(token, expected_nonce=nonce)
+        claims = await verify_yandex_access_token(token)
     except SocialAuthError as e:
-        return f'Invalid Apple token: {e}', 401
+        return f'Invalid Yandex token: {e}', 401
 
     return await _sign_in_with_social(
-        provider='apple',
+        provider='yandex',
         sub=claims.sub,
         email=claims.email,
         email_verified=claims.email_verified,
@@ -762,7 +761,7 @@ async def post_finish_onboarding(s: t.SessionInfo) -> object:
         await tx.execute('SET LOCAL statement_timeout = 15000') # 15 seconds
         row = await tx.require_one(Q_FINISH_ONBOARDING, params=api_params)
 
-        # If this user signed up via Google/Apple, drain the pending
+        # If this user signed up via Google/Yandex, drain the pending
         # provider identity from `duo_session` into `social_identity` now
         # that the new `person` row exists.
         await tx.execute(Q_PROMOTE_PENDING_SOCIAL_IDENTITY, dict(

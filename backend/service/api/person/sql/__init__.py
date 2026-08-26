@@ -2837,7 +2837,7 @@ FROM
 
 
 # ---------------------------------------------------------------------------
-# Social login (Google / Apple)
+# Social login (Google / Yandex)
 # ---------------------------------------------------------------------------
 
 # True when the caller is currently banned, by either normalized email
@@ -2845,9 +2845,8 @@ FROM
 # first statement inside their api_tx() block; the OTP-issuing /
 # session-issuing query then runs against the same snapshot.
 #
-# We don't repeat the bad_email_domain check here because Apple/Google
-# already gate disposable providers, and Apple's
-# @privaterelay.appleid.com would otherwise trip an overzealous filter.
+# Provider APIs attest the account's email, so social sign-in does not repeat
+# the disposable-domain check used for direct email registration.
 # The OTP path keeps that filter inside `_OTP_CTE` for new sign-ups.
 Q_IS_BANNED = """
 SELECT 1

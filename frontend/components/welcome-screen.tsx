@@ -33,9 +33,8 @@ import { OptionScreen } from './option-screen';
 import { StatusBarSpacer } from './status-bar-spacer';
 import { japi } from '../api/api';
 import {
-  consumePendingAppleWebSignIn,
-  signInWithApple,
   useGoogleSignIn,
+  useYandexSignIn,
 } from '../api/social-auth';
 import { applyAuthenticatedResponse } from '../api/auth';
 import { socialAccountOptionGroups } from '../data/option-groups';
@@ -472,7 +471,7 @@ const InviteScreen = ({navigation, route}: NativeStackScreenProps<RootParamList,
   );
 };
 
-type SocialProvider = 'google' | 'apple';
+type SocialProvider = 'google' | 'yandex';
 
 // Brand button with the icon pinned to the left edge and the label
 // centered against the full button width. The centering is handled by
@@ -648,7 +647,7 @@ const finishSocialSignIn = async ({
   navigation,
   setLoginStatus,
 }: {
-  endpoint: '/sign-in-with-google' | '/sign-in-with-apple',
+  endpoint: '/sign-in-with-google' | '/sign-in-with-yandex',
   body: Record<string, unknown>,
   clubName: string | undefined,
   navigation: NativeStackNavigationProp<WelcomeParamList>,
@@ -715,6 +714,7 @@ const WelcomeScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParam
   const [socialLoading, setSocialLoading] = useState<SocialProvider | null>(null);
 
   const googleSignIn = useGoogleSignIn();
+  const yandexSignIn = useYandexSignIn();
   const { height: windowHeight } = useWindowDimensions();
 
   const onPressUseEmail = () => {
@@ -754,24 +754,20 @@ const WelcomeScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParam
     }
   };
 
-  const onPressApple = async () => {
-    if (socialLoading) return;
+  const onPressYandex = async () => {
+    if (socialLoading || !yandexSignIn.ready) return;
     setLoginStatus("");
-    setSocialLoading('apple');
+    setSocialLoading('yandex');
     try {
-      // On web this never resolves — the page is navigating to Apple,
-      // and the sign-in is finished by the web-return effect below
-      // when the backend's callback redirects us back here. iOS and
-      // Android resolve normally.
-      const result = await signInWithApple({ clubName: clubName_ ?? '' });
+      const result = await yandexSignIn.promptForAccessToken();
       if (!result.ok && !result.cancelled) {
-        setLoginStatus(result.reason ?? 'Apple sign-in failed');
+        setLoginStatus(result.reason ?? 'Yandex sign-in failed');
         return;
       }
       if (!result.ok) return;
       await finishSocialSignIn({
-        endpoint: '/sign-in-with-apple',
-        body: { identity_token: result.identityToken, nonce: result.nonce },
+        endpoint: '/sign-in-with-yandex',
+        body: { access_token: result.idToken },
         clubName: clubName_,
         navigation,
         setLoginStatus,
@@ -780,41 +776,6 @@ const WelcomeScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParam
       setSocialLoading(null);
     }
   };
-
-  // Completes a web Apple sign-in started by a prior tap of "Continue
-  // with Apple": on web the full-page redirect to Apple tears down the
-  // app, and Apple's callback redirects users back to the SPA root
-  // (i.e. this screen) with the id_token in the query string. The
-  // shared `finishSocialSignIn` handles the actual API call. iOS and
-  // Android never enter this branch — their flows resolve in-place
-  // inside `onPressApple` above. Runs once on mount; the consume call
-  // strips the query params and clears the pending sessionStorage
-  // entry, so a refresh won't replay it.
-  useEffect(() => {
-    const pending = consumePendingAppleWebSignIn();
-    if (!pending) return;
-    const { result, context } = pending;
-    (async () => {
-      setLoginStatus("");
-      setSocialLoading('apple');
-      try {
-        if (!result.ok && !result.cancelled) {
-          setLoginStatus(result.reason ?? 'Apple sign-in failed');
-          return;
-        }
-        if (!result.ok) return;
-        await finishSocialSignIn({
-          endpoint: '/sign-in-with-apple',
-          body: { identity_token: result.identityToken, nonce: result.nonce },
-          clubName: context.clubName || undefined,
-          navigation,
-          setLoginStatus,
-        });
-      } finally {
-        setSocialLoading(null);
-      }
-    })();
-  }, []);
 
   return (
     <SafeAreaView
@@ -894,13 +855,13 @@ const WelcomeScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParam
             Continue with Google
           </PrimaryAuthButton>
           <PrimaryAuthButton
-            onPress={onPressApple}
-            loading={socialLoading === 'apple'}
-            icon={<Ionicons name="logo-apple" size={22} color="#ffffff" />}
+            onPress={onPressYandex}
+            loading={socialLoading === 'yandex'}
+            icon={<DefaultText style={{ color: '#ffffff', fontWeight: 900 }}>Я</DefaultText>}
             backgroundColor="#000000"
             textColor="#ffffff"
           >
-            Continue with Apple
+            Continue with Yandex
           </PrimaryAuthButton>
           <DefaultText
             style={{

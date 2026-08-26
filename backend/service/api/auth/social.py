@@ -1,27 +1,23 @@
 """
-Verify ID tokens from Google and Apple.
+Verify identity credentials from Google and Yandex.
 
-Both providers issue signed JWTs after a successful sign-in. Rather than
-calling each provider's `/userinfo` endpoint (extra round-trip, possible
-rate limits), we verify the JWT signature locally against the provider's
-JWKS — same trust model, $0 cost, and no external dependency at request
-time after the JWKS is cached.
+Google ID tokens are verified locally against Google's keys. Yandex issues an
+opaque OAuth token, so it is resolved through Yandex Login's user-info endpoint;
+the returned client ID must match this application before the identity is used.
 
 Env vars:
     DUO_GOOGLE_CLIENT_IDS  Comma-separated allowed `aud` values for Google.
                            Include every OAuth client ID that ships in a
                            client (Web, iOS, Android).
-    DUO_APPLE_CLIENT_IDS   Comma-separated allowed `aud` values for Apple.
-                           Bundle ID for native iOS, Services ID for web.
+    DUO_YANDEX_CLIENT_ID   Expected Yandex OAuth application ID.
 """
 
-import secrets
 import time
 from typing import TypedDict
 import service.api.duotypes as t
 
 import jwt
-from jwt import PyJWKClient
+import httpx
 from google.auth.transport.requests import Request as _GoogleRequest
 from google.oauth2 import id_token as _google_id_token
 
@@ -38,22 +34,13 @@ class SocialAuthError(Exception):
 
 
 from serviceshared.duoenv.api import (
-    APPLE_CLIENT_IDS as _APPLE_CLIENT_IDS,
     GOOGLE_CLIENT_IDS as _GOOGLE_CLIENT_IDS,
+    YANDEX_CLIENT_ID as _YANDEX_CLIENT_ID,
 )
 
 _GOOGLE_ISSUERS = ('https://accounts.google.com', 'accounts.google.com')
-_APPLE_JWKS_URL = 'https://appleid.apple.com/auth/keys'
-_APPLE_ISSUER = 'https://appleid.apple.com'
-
-# `PyJWKClient` does its own in-process caching with a 1-hour TTL, so a
-# module-level singleton is fine.
-_apple_jwks_client = PyJWKClient(
-    _APPLE_JWKS_URL,
-    cache_keys=True,
-    lifespan=3600,
-    timeout=_PROVIDER_HTTP_TIMEOUT_SECONDS,
-)
+_YANDEX_USERINFO_URL = 'https://login.yandex.ru/info'
+_YANDEX_MOCK_ISSUER = 'https://login.yandex.ru'
 
 
 # `google-auth`'s `Request` accepts a per-call timeout via __call__, but
@@ -162,79 +149,49 @@ def verify_google_id_token(id_token: str) -> t.SocialClaims:
     )
 
 
-def verify_apple_identity_token(
-    identity_token: str,
-    *,
-    expected_nonce: str,
-) -> t.SocialClaims:
-    """
-    Validate an Apple `identity_token` (the JWT returned to the client by
-    Sign In with Apple). Returns the canonical claims.
-
-    `expected_nonce` is the random string the client passed to Apple as the
-    `nonce` (native `signInAsync({ nonce })` on iOS, `&nonce=` URL param on
-    web/Android). Apple echoes it verbatim into the JWT's `nonce` claim; we
-    compare the two to bind the token to the originating client session.
-
-    Raises SocialAuthError on any verification failure.
-    """
-    if not _APPLE_CLIENT_IDS:
-        raise SocialAuthError('DUO_APPLE_CLIENT_IDS is not configured')
+async def verify_yandex_access_token(access_token: str) -> t.SocialClaims:
+    """Resolve and validate a Yandex OAuth token against Yandex Login."""
+    if not _YANDEX_CLIENT_ID:
+        raise SocialAuthError('DUO_YANDEX_CLIENT_ID is not configured')
 
     if enable_mocking():
-        claims = _decode_unverified(
-            identity_token,
-            allowed_issuers=(_APPLE_ISSUER,),
-            allowed_audiences=_APPLE_CLIENT_IDS,
+        token_claims = _decode_unverified(
+            access_token,
+            allowed_issuers=(_YANDEX_MOCK_ISSUER,),
+            allowed_audiences=[_YANDEX_CLIENT_ID],
         )
+        claims = {
+            'id': token_claims.get('sub'),
+            'default_email': token_claims.get('email'),
+            'client_id': token_claims.get('aud'),
+        }
     else:
         try:
-            signing_key = _apple_jwks_client.get_signing_key_from_jwt(identity_token)
-            claims = jwt.decode(
-                identity_token,
-                signing_key.key,
-                algorithms=['RS256'],
-                audience=_APPLE_CLIENT_IDS,
-                issuer=_APPLE_ISSUER,
-                options={'require': ['exp', 'iat', 'sub', 'iss', 'aud', 'nonce']},
-            )
-        except (jwt.PyJWTError, jwt.exceptions.PyJWKClientError) as e:
-            raise SocialAuthError(f'Invalid Apple token: {e}')
+            async with httpx.AsyncClient(
+                timeout=_PROVIDER_HTTP_TIMEOUT_SECONDS,
+            ) as client:
+                response = await client.get(
+                    _YANDEX_USERINFO_URL,
+                    headers={'Authorization': f'OAuth {access_token}'},
+                    params={'format': 'json'},
+                )
+                response.raise_for_status()
+                claims = response.json()
+        except (httpx.HTTPError, ValueError) as e:
+            raise SocialAuthError(f'Invalid Yandex token: {e}')
 
-    # Constant-time nonce comparison. An attacker who controls neither the
-    # client nor Apple can't forge a JWT with a known nonce, but failing
-    # closed here protects against bug-class issues if a nonce ever leaks.
-    token_nonce = claims.get('nonce')
-    if not isinstance(token_nonce, str) or not secrets.compare_digest(
-        token_nonce, expected_nonce
-    ):
-        raise SocialAuthError('Apple token nonce did not match the expected value')
+    if not isinstance(claims, dict):
+        raise SocialAuthError('Yandex returned an invalid user-info response')
+    if claims.get('client_id') != _YANDEX_CLIENT_ID:
+        raise SocialAuthError('Yandex token was issued to another application')
 
-    sub = claims.get('sub')
-    email = claims.get('email')
-    if not sub:
-        raise SocialAuthError('Apple token missing sub')
-    if not email:
-        # Apple usually includes `email` in every identity token, but if it
-        # ever omits it (e.g. token from a re-auth path) we cannot link a
-        # new account from email — only an existing `social_identity` row
-        # via sub will work. Caller handles that case.
-        email = ''
+    sub = claims.get('id')
+    email = claims.get('default_email')
+    if not isinstance(sub, str) or not sub:
+        raise SocialAuthError('Yandex response missing id')
+    if not isinstance(email, str) or not email:
+        raise SocialAuthError(
+            'Yandex response missing default_email; enable email access'
+        )
 
-    # Apple's `email_verified` is a string ("true"/"false") and is always
-    # "true" when the field is present (relay or real). When the claim is
-    # absent we trust the issuer: Apple wouldn't include an email it hasn't
-    # verified, so an unset claim alongside a present `email` is treated as
-    # verified. The only false case is an explicit "false" / False.
-    raw_verified = claims.get('email_verified')
-    email_verified = (
-        raw_verified is None or
-        raw_verified is True or
-        (isinstance(raw_verified, str) and raw_verified.lower() == 'true')
-    )
-
-    return t.SocialClaims(
-        sub=sub,
-        email=email,
-        email_verified=email_verified,
-    )
+    return t.SocialClaims(sub=sub, email=email, email_verified=True)

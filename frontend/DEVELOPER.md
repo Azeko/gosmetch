@@ -146,7 +146,7 @@ is stored in the repository.
    generated `ios` project and retry the launcher.
 
 The local iOS build opts into local-network access and permits plain HTTP only
-for local-network hosts. It also omits Associated Domains, Sign in with Apple,
+for local-network hosts. It also omits Associated Domains,
 and Push Notifications so a free Apple Personal Team can sign the app. Those
 features are unavailable in the local build. Normal builds keep the existing
 production settings.
