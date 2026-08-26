@@ -13,3 +13,15 @@ output "app_storage_secret_key" {
   value     = yandex_iam_service_account_static_access_key.app_storage.secret_key
   sensitive = true
 }
+output "registry_publisher_authorized_key" {
+  description = "Set as CONTAINER_REGISTRY_PASSWORD; use json_key as the username."
+  value = jsonencode({
+    id                 = yandex_iam_service_account_key.registry_publisher.id
+    service_account_id = yandex_iam_service_account.registry_publisher.service_account_id
+    created_at         = yandex_iam_service_account_key.registry_publisher.created_at
+    key_algorithm      = yandex_iam_service_account_key.registry_publisher.key_algorithm
+    public_key         = yandex_iam_service_account_key.registry_publisher.public_key
+    private_key        = yandex_iam_service_account_key.registry_publisher.private_key
+  })
+  sensitive = true
+}

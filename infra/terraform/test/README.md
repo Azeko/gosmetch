@@ -30,6 +30,9 @@ variables and secrets inline.
 The application S3 key is a sensitive Terraform output and therefore resides
 in encrypted remote state. Retrieve it only to load a Kubernetes secret; never
 commit it or print it in CI. Rotate it after exposure or staff changes.
+The sensitive `registry_publisher_authorized_key` output is the JSON password
+for the image workflow (`json_key` is the username). Store it as a protected
+GitHub secret and rotate it like any other long-lived credential.
 
 ## Deployment handoff
 
