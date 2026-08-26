@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { ComponentProps, Ref } from 'react';
 import { useAppTheme } from '../app-theme/app-theme';
+import { translateToRussian } from '../i18n/russian';
 
 const DefaultTextInput = (props: ComponentProps<typeof TextInput> & { innerRef?: Ref<TextInput> }) => {
   const { style, innerRef, ...rest } = props;
@@ -14,7 +15,6 @@ const DefaultTextInput = (props: ComponentProps<typeof TextInput> & { innerRef?:
   return (
     <TextInput
       ref={innerRef}
-      placeholder="Write here..."
       placeholderTextColor="#888"
       cursorColor="#1769aa"
       returnKeyType="done"
@@ -29,6 +29,7 @@ const DefaultTextInput = (props: ComponentProps<typeof TextInput> & { innerRef?:
         ...style,
       }}
       {...rest}
+      placeholder={translateToRussian(rest.placeholder ?? props.placeholder ?? 'Write here...')}
     />
   );
 };

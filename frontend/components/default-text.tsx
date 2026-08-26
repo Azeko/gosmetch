@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import Animated, { AnimatedStyle } from 'react-native-reanimated';
 import { useAppTheme } from '../app-theme/app-theme';
+import { translateNodeToRussian } from '../i18n/russian';
 
 const montserratFontFamily: Record<string, string> = {
   '100': 'MontserratThin',
@@ -51,7 +52,7 @@ const DefaultText = (props: TextProps & {
         selectable={false}
         {...{...rest, style: [...baseStyle, animatedStyle, { fontWeight: undefined }]}}
       >
-        {props.children}
+        {translateNodeToRussian(props.children)}
       </Animated.Text>
     );
   } else {
@@ -60,7 +61,7 @@ const DefaultText = (props: TextProps & {
         selectable={false}
         {...{...rest, style: [...baseStyle, { fontWeight: undefined }]}}
       >
-        {props.children}
+        {translateNodeToRussian(props.children)}
       </Text>
     );
   }
