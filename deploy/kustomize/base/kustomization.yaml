@@ -14,7 +14,7 @@ resources:
 secretGenerator:
   - name: gosmetch-secrets
     literals:
-      - DUO_DB_USER=gosmetch
+      - DUO_DB_USER=app
       - DUO_DB_PASS=CHANGE_ME
       - DUO_SMTP_USER=CHANGE_ME
       - DUO_SMTP_PASS=CHANGE_ME
@@ -22,11 +22,6 @@ secretGenerator:
       - DUO_R2_ACCESS_KEY_ID=CHANGE_ME
       - DUO_R2_ACCESS_KEY_SECRET=CHANGE_ME
       - DUO_VAPID_PRIVATE_KEY=CHANGE_ME
-  - name: postgres-app
-    type: kubernetes.io/basic-auth
-    literals:
-      - username=gosmetch
-      - password=CHANGE_ME
 generatorOptions:
   disableNameSuffixHash: true
 labels:
