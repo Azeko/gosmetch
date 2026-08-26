@@ -1,1 +1,13 @@
 .claude
+# Terraform local state and credentials
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+backend.hcl
+terraform.tfvars
+*.auto.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

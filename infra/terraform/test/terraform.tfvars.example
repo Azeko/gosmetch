@@ -1,0 +1,5 @@
+cloud_id         = "b1g00000000000000000"
+folder_id        = "b1g00000000000000001"
+zone             = "ru-central1-a"
+bucket_prefix    = "gosmetch-test-example"
+api_allowed_cidrs = ["203.0.113.10/32"]
