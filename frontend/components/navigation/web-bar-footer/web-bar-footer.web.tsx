@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AppStoreBadges } from '../../badges/app-store/app-store';
+import { translateToRussian } from '../../../i18n/russian';
 const twitterIcon = require('../../../assets/social/twitter-white.svg');
 const redditIcon = require('../../../assets/social/reddit-white.svg');
 const githubIcon = require('../../../assets/social/github-white.svg');
@@ -76,7 +77,7 @@ const LegalLinks = () => {
               textDecoration: hoveredHref === href ? 'underline' : 'none',
             }}
           >
-            {label}
+            {translateToRussian(label)}
           </a>
         </li>
       )}
