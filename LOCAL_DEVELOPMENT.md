@@ -14,8 +14,8 @@ integrations.
 ### Start
 
 ```bash
-git clone https://github.com/duolicious/duolicious.git
-cd duolicious
+git clone https://github.com/Azeko/gosmetch.git
+cd gosmetch
 docker compose up --build
 ```
 
