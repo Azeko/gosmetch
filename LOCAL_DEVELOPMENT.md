@@ -33,6 +33,10 @@ Stop everything with `Ctrl-C`, then remove the containers with:
 docker compose down
 ```
 
+PostgreSQL records and mock S3 objects are stored in Docker named volumes and
+are reused automatically the next time the stack starts. Running
+`docker compose down` without `--volumes` does not delete them.
+
 ## Web from source with the backend in Docker
 
 Use this workflow for frontend hot reload, or to run the web and iPhone apps
@@ -186,13 +190,15 @@ Stop Metro with `Ctrl-C`. Stop the backend without deleting its data:
 docker compose -f backend/docker-compose.yml stop
 ```
 
-Remove local backend containers and volumes for a clean database reset:
+Remove local backend containers and volumes for a clean database and mock S3
+reset:
 
 ```bash
 docker compose -f backend/docker-compose.yml down --volumes
 ```
 
-The volume command permanently deletes local development data.
+The volume command permanently deletes local PostgreSQL records and mock S3
+objects, including uploaded development photos and audio.
 
 ## Common problems
 

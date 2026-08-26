@@ -41,6 +41,15 @@ Run an entire test suite (e.g. all tests in functionality1):
 - Status page: [http://localhost:8080](http://localhost:8080)
 - PgAdmin: [http://localhost:8090](http://localhost:8090)
 
+PostgreSQL records and mock S3 objects persist in Docker named volumes across
+container recreation and `docker compose down`. To explicitly reset both, run:
+
+```bash
+docker compose down --volumes
+```
+
+This permanently deletes the local database and uploaded mock photos and audio.
+
 ## Local development
 
 Prefer Docker? You already started everything with `docker compose up -d`.
