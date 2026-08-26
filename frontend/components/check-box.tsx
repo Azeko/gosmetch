@@ -12,7 +12,7 @@ import { faCheck } from '@fortawesome/free-solid-svg-icons/faCheck';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DefaultText } from './default-text';
 
-const COLOR = '#70f';
+const COLOR = '#1769aa';
 const SIZE = 22;
 const DURATION = 150;
 
@@ -27,7 +27,7 @@ const Box = ({ value, style }: { value: boolean, style?: ViewStyle }) => {
     backgroundColor: interpolateColor(
       progress.value,
       [0, 1],
-      ['rgba(119, 0, 255, 0)', 'rgba(119, 0, 255, 1)'],
+      ['rgba(23, 105, 170, 0)', 'rgba(23, 105, 170, 1)'],
     ),
   }));
 

@@ -27,7 +27,7 @@ const durationColor = '#ff6bfa';
 const Staff = ({
   label,
   tip,
-  color = '#70f',
+  color = '#1769aa',
 }: {
   label: string,
   tip: string,
@@ -92,7 +92,7 @@ const Gold = ({
     <View
       ref={viewRef}
       style={{
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         borderRadius: 999,
         alignItems: 'center',
         justifyContent: 'center',

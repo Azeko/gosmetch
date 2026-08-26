@@ -15,7 +15,7 @@ const TRACK_HEIGHT = 28;
 const THUMB_SIZE = 22;
 const TRACK_PADDING = 3;
 const TRAVEL = TRACK_WIDTH - THUMB_SIZE - 2 * TRACK_PADDING;
-const ON_COLOR = '#7700ff';
+const ON_COLOR = '#1769aa';
 const DURATION = 150;
 
 const Toggle = ({

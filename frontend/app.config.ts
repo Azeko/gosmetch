@@ -1,4 +1,5 @@
 import { ExpoConfig } from 'expo/config';
+import { BRAND_BLUE } from './brand/brand';
 
 // In SDK 46 and lower, use the following import instead:
 // import { ExpoConfig } from '@expo/config-types';
@@ -6,7 +7,7 @@ import { ExpoConfig } from 'expo/config';
 const DEEP_LINK_HOSTNAME = 'get.duolicious.app';
 
 const config: ExpoConfig = {
-  name: 'Duolicious',
+  name: 'ГосМэтч',
   slug: 'duolicious',
   // Registers an intent filter for `app.duolicious://` so Android can
   // dispatch the Google OAuth redirect (`app.duolicious:/oauthredirect`)
@@ -15,7 +16,7 @@ const config: ExpoConfig = {
   scheme: 'app.duolicious',
   version: "32.9.5",
   orientation: "portrait",
-  icon: './assets/icon.png',
+  icon: './assets/gosmetch-logo-square.png',
   updates: {
     fallbackToCacheTimeout: 0
   },
@@ -51,7 +52,7 @@ const config: ExpoConfig = {
     deepLinkHostname: DEEP_LINK_HOSTNAME,
   },
   web: {
-    favicon: "./assets/favicon.png"
+    favicon: "./assets/gosmetch-logo-square.png"
   },
   ios: {
     bundleIdentifier: "app.duolicious",
@@ -72,8 +73,8 @@ const config: ExpoConfig = {
     googleServicesFile: "./google-services.json",
     package: "app.duolicious",
     adaptiveIcon: {
-      foregroundImage: "./assets/adaptive-icon.png",
-      backgroundColor: "#7700ff"
+      foregroundImage: "./assets/gosmetch-logo-square.png",
+      backgroundColor: BRAND_BLUE
     },
     intentFilters: [
       {
@@ -102,7 +103,7 @@ const config: ExpoConfig = {
       "expo-notifications",
       {
         "icon": "./assets/notification.png",
-        "color": "#7700ff",
+        "color": BRAND_BLUE,
         "sounds": [
           "./assets/audio/notification.mp3"
         ]
@@ -111,8 +112,8 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#7700ff",
-        image: "./assets/splash.png",
+        backgroundColor: BRAND_BLUE,
+        image: "./assets/gosmetch-logo-square.png",
         imageWidth: 300,
       }
     ],

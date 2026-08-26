@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: thumbRadius * 2,
     height: thumbRadius * 2,
-    backgroundColor: '#70f',
+    backgroundColor: '#1769aa',
     borderRadius: thumbRadius,
   },
 });

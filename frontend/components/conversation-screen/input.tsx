@@ -420,7 +420,7 @@ const IconBar = ({
             <FontAwesomeIcon
               icon={faPaperPlane}
               size={20}
-              color="#70f"
+              color="#1769aa"
               // @ts-ignore – 'outline' is a web-only style prop
               style={{ marginRight: 5, marginBottom: 5, outline: 'none' }}
             />
@@ -967,10 +967,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgb(228, 204, 255)',
+    backgroundColor: 'rgb(209, 225, 238)',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#70f',
+    borderColor: '#1769aa',
   },
   hintContainer: {
     position: 'absolute',

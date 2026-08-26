@@ -66,7 +66,7 @@ const LeftComponent = ({count}: {count: number}) => {
         position: 'absolute',
         right: 0,
         top: '20%',
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         paddingTop: 10,
         paddingBottom: 10,
         paddingLeft: 20,
@@ -112,7 +112,7 @@ const RightComponent = ({count}: {count: number}) => {
         position: 'absolute',
         left: 0,
         top: '20%',
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         paddingTop: 10,
         paddingBottom: 10,
         paddingLeft: 20,
@@ -554,7 +554,7 @@ const AnswerIcon = ({
 
   const backgroundColor = (() => {
     if (selected === false) return appThemeName === 'dark' ? 'black' : 'white';
-    if (enabled) return '#70f';
+    if (enabled) return '#1769aa';
     return '#cabcff';
   })();
 

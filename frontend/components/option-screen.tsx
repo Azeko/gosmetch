@@ -1833,7 +1833,7 @@ const OptionScreen = ({navigation, route}: NativeStackScreenProps<ParamListBase>
           }}
         >
           <ButtonWithCenteredText
-            secondary={showSkipButton || backgroundColor === '#7700ff'}
+            secondary={showSkipButton || backgroundColor === '#1769aa'}
             onPress={showSkipButton ? onPressSkip : onPressContinue}
             loading={isLoading}
             containerStyle={{

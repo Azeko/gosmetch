@@ -4,6 +4,12 @@ import { listen, notify, lastEvent } from '../events/events';
 import { appThemeName as kvAppThemeName } from '../kv-storage/app-theme';
 import { useSignedInUser } from '../events/signed-in-user';
 import { assertNever } from '../util/util';
+import {
+  BRAND_BLUE,
+  BRAND_BLUE_TINT,
+  BRAND_RED,
+  BRAND_RED_TINT,
+} from '../brand/brand';
 
 type AppThemeName = 'light' | 'dark';
 
@@ -60,15 +66,15 @@ const APP_THEME: AppThemes = {
     },
     interactiveBorderColor: '#dddddd',
     quizCardBackgroundColor: '#ffffff',
-    quizCardColor: '#7700ff',
+    quizCardColor: BRAND_RED,
     speechBubbleOtherUserBackgroundColor: '#eeeeee',
     speechBubbleOtherUserColor: '#000000',
     reactionBarBackgroundColor: '#ffffff',
     reactionBarBorderColor: '#cccccc',
-    reactionSelectedBackgroundColor: '#ebd9ff',
-    brandColor: '#7700ff',
-    avatarBackgroundColor: '#f1e5ff',
-    avatarColor: 'rgba(119, 0, 255, 0.2)',
+    reactionSelectedBackgroundColor: BRAND_RED_TINT,
+    brandColor: BRAND_BLUE,
+    avatarBackgroundColor: BRAND_BLUE_TINT,
+    avatarColor: 'rgba(23, 105, 170, 0.2)',
     timestampFontSize: 13,
   },
   dark: {
@@ -94,7 +100,7 @@ const APP_THEME: AppThemes = {
     reactionBarBackgroundColor: '#3a3b45',
     reactionBarBorderColor: '#54555f',
     reactionSelectedBackgroundColor: '#5d5e66',
-    brandColor: '#ffffff',
+    brandColor: '#71b9ef',
     avatarBackgroundColor: '#2a2b35',
     avatarColor: '#ffffff',
     timestampFontSize: 13,

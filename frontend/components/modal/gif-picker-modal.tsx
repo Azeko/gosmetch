@@ -247,7 +247,7 @@ const GifPickerModal: React.FC = () => {
   const loadingMoreIndicator = loadingMore ? (
     <LogoActivityIndicator
       size="large"
-      color="#70f"
+      color="#1769aa"
       style={styles.loadingMoreIndicator}
     />
   ) : null;
@@ -303,7 +303,7 @@ const GifPickerModal: React.FC = () => {
   const grid = loading ? (
     <LogoActivityIndicator
       size="large"
-      color="#70f"
+      color="#1769aa"
       style={styles.loadingIndicator}
     />
   ) : gridList;
@@ -369,7 +369,7 @@ const GifPickerModal: React.FC = () => {
         </View>
         <View style={styles.buttonContainer}>
           <ModalButton color="#999" onPress={cancel} title="Cancel" />
-          <ModalButton color="#70f" onPress={pickGif} title="Send" />
+          <ModalButton color="#1769aa" onPress={pickGif} title="Send" />
         </View>
       </View>
     </Reanimated.View>
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
     borderWidth: 6,
   },
   selectedGif: {
-    borderColor: '#70f',
+    borderColor: '#1769aa',
   },
   unselectedGif: {
     borderColor: 'transparent',

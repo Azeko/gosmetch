@@ -319,7 +319,7 @@ const ImageCropper = () => {
       <View style={styles.bottomContainer}>
         <View style={styles.buttonContainer}>
           <ModalButton color="#999" onPress={onCancelPress} title="Cancel" />
-          <ModalButton color="#70f" onPress={onCropPress} title="Crop" />
+          <ModalButton color="#1769aa" onPress={onCropPress} title="Crop" />
         </View>
         {(data?.showProtip ?? true) &&
           <DefaultText style={styles.protip}>

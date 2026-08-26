@@ -16,7 +16,7 @@ const DefaultTextInput = (props: ComponentProps<typeof TextInput> & { innerRef?:
       ref={innerRef}
       placeholder="Write here..."
       placeholderTextColor="#888"
-      cursorColor="#70f"
+      cursorColor="#1769aa"
       returnKeyType="done"
       onSubmitEditing={() => Keyboard.dismiss()}
       style={{

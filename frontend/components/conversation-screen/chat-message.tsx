@@ -65,7 +65,7 @@ import {
 } from '../modal/emoji-picker-modal';
 import { MessageReceipt, ReceiptText } from './message-receipt';
 
-const currentUserBackgroundColor = '#70f';
+const currentUserBackgroundColor = '#1769aa';
 
 const defaultTextColor = 'black';
 

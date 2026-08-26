@@ -25,7 +25,7 @@ const DuoliciousRightPanelContent = () => {
     <View
       style={{
         borderRadius: 10,
-        backgroundColor: '#70f',
+        backgroundColor: '#1769aa',
         width: '100%',
         padding: 20,
         gap: 20,

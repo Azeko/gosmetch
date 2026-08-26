@@ -267,7 +267,7 @@ const Chart = ({name1, percentage1, name2, percentage2, ...props}: {
             labelPercentage={labelPercentage(percentage2)}
             extraHeight={20}/>
           <Tick
-            color="#70f"
+            color="#1769aa"
             position={percentage1}
             label={name1}
             round={compact}
