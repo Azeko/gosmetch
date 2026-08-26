@@ -116,14 +116,14 @@ const App = () => {
               documentTitle={{
                 // The focused screen can set its own `title` option (e.g. the
                 // prospect profile sets it to the prospect's name once the
-                // API resolves) and we splice it in front of "ÐÐ¾ÑÐÑÑÑ".
+                // API resolves) and we splice it in front of "ГосМэтч".
                 // Screens that don't set a title fall through to the bare
                 // app name.
                 formatter: (options) => {
                   const prefix = numUnread ? `(${numUnread}) ` : '';
                   const screenTitle = options?.title;
                   return prefix + (
-                    screenTitle ? `${screenTitle} - ÐÐ¾ÑÐÑÑÑ` : 'ÐÐ¾ÑÐÑÑÑ'
+                    screenTitle ? `${screenTitle} - ГосМэтч` : 'ГосМэтч'
                   );
                 },
               }}

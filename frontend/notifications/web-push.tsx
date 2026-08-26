@@ -93,7 +93,7 @@ const requestAndRegisterWebPush = async (): Promise<void> => {
 
   if (subscribed && !alreadyGranted) {
     notifyOnWeb(
-      'ÐÐ¾ÑÐÑÑÑ',
+      'ГосМэтч',
       'Here’s what a message will look like 💜',
       true,
     );

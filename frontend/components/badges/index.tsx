@@ -71,11 +71,11 @@ const Staff = ({
   );
 };
 
-const Admin = () => <Staff label="admin" tip="ÐÐ¾ÑÐÑÑÑ administrator" />;
+const Admin = () => <Staff label="admin" tip="ГосМэтч administrator" />;
 
-const Bot = () => <Staff label="bot" tip="ÐÐ¾ÑÐÑÑÑ bot" />;
+const Bot = () => <Staff label="bot" tip="ГосМэтч bot" />;
 
-const Mod = () => <Staff label="mod" tip="ÐÐ¾ÑÐÑÑÑ moderator" color="black" />;
+const Mod = () => <Staff label="mod" tip="ГосМэтч moderator" color="black" />;
 
 const Gold = ({
   style = {},
@@ -435,7 +435,7 @@ const LongBio = () => <BaseLongBio numLoops={3} />;
 
 const EarlyAdopter = () => {
   const { viewRef, props } = useTooltip(
-    `Joined ÐÐ¾ÑÐÑÑÑ in its first year`
+    `Joined ГосМэтч in its first year`
   );
 
   return (

@@ -84,7 +84,7 @@ const UtilityScreen = ({
           }}
           selectable={false}
         >
-          ÐÐ¾ÑÐÑÑÑ
+          ГосМэтч
         </Text>
         <DefaultText
           style={{

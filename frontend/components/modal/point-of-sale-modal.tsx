@@ -214,7 +214,7 @@ const Offering = ({
                 fontSize: 16,
               }}
             >
-              ÐÐ¾ÑÐÑÑÑ
+              ГосМэтч
             </DefaultText>
           </View>
           {!isCompact &&

@@ -24,7 +24,7 @@ const KEYS = [
 type Key = typeof KEYS[number];
 
 /*
- * Many users have been complaining that upgrading ÐÐ¾ÑÐÑÑÑ on Android causes
+ * Many users have been complaining that upgrading ГосМэтч on Android causes
  * it to get stuck on the splash screen. Clearing the app's data fixes the
  * issue.
  *
