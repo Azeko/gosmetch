@@ -46,6 +46,10 @@ You do not need to install the Expo CLI globally; commands are run via npm scrip
 - `npm run typecheck` – TypeScript type checks
 - `npm run lint` – ESLint
 
+When `./run-ios-device.sh` is already serving a physical iPhone, press `w` in
+that Metro terminal to open the web app with the same local backend settings.
+Do not start `npm run web` separately because both processes use port `8081`.
+
 ---
 
 ## Environment configuration
@@ -83,6 +87,69 @@ export DUO_IMAGES_URL=http://localhost:9090/s3-mock-bucket
 export DUO_AUDIO_URL=http://localhost:9090/s3-mock-audio-bucket
 export DUO_PARTNER_URL=${DUO_PARTNER_URL:-https://partner.duolicious.app}
 ```
+
+### Run on a physical iPhone with the backend on your Mac
+
+For a concise end-to-end setup, including Xcode signing and first-launch device
+trust, start with the repository's [local development quickstart](../LOCAL_DEVELOPMENT.md).
+
+`localhost` on an iPhone refers to the iPhone, not the Mac. The device launcher
+uses the Mac's Bonjour hostname at runtime so no personal hostname or LAN address
+is stored in the repository.
+
+1. Connect the Mac and iPhone to the same network. Keep the iPhone connected to
+   Xcode and enable Developer Mode on the device.
+2. From the repository root, start the backend and confirm it is healthy:
+
+   ```bash
+   docker compose -f backend/docker-compose.yml up -d
+   curl -sf http://localhost:5000/health && echo API OK
+   ```
+
+   If macOS is already using port `5000` (commonly for AirPlay Receiver), use
+   another host port in both terminals:
+
+   ```bash
+   export DUO_API_PORT=5001
+   docker compose -f backend/docker-compose.yml up -d
+   curl -sf http://localhost:${DUO_API_PORT}/health && echo API OK
+   ```
+
+3. Confirm the backend is reachable from Safari on the iPhone. On the Mac, print
+   the URL to open:
+
+   ```bash
+   printf 'http://%s.local:%s/health\n' \
+     "$(scutil --get LocalHostName)" "${DUO_API_PORT:-5000}"
+   ```
+
+   If it does not load, allow incoming connections for Docker and Node in macOS
+   firewall settings and verify both devices are on a network that permits
+   device-to-device traffic.
+
+4. Install frontend dependencies, choose a unique bundle identifier owned by
+   your Apple Developer account, and launch the app:
+
+   ```bash
+   cd frontend
+   npm install
+   npx patch-package
+   export DUO_IOS_BUNDLE_IDENTIFIER=com.example.duolicious.dev
+   # If the backend terminal uses a non-default port, export the same value:
+   export DUO_API_PORT=${DUO_API_PORT:-5000}
+   ./run-ios-device.sh
+   ```
+
+   Replace `com.example.duolicious.dev` with your own identifier. Keep it in the
+   shell environment; do not commit it. Select the connected iPhone if Expo asks
+   for a device. If Xcode asks for signing, select your development team for the
+   generated `ios` project and retry the launcher.
+
+The local iOS build opts into local-network access and permits plain HTTP only
+for local-network hosts. It also omits Associated Domains, Sign in with Apple,
+and Push Notifications so a free Apple Personal Team can sign the app. Those
+features are unavailable in the local build. Normal builds keep the existing
+production settings.
 
 ---
 
