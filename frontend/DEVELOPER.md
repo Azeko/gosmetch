@@ -86,6 +86,9 @@ export DUO_PARTNER_URL=${DUO_PARTNER_URL:-https://partner.duolicious.app}
 
 ### Run on a physical iPhone with the backend on your Mac
 
+For a concise end-to-end setup, including Xcode signing and first-launch device
+trust, start with the repository's [local development quickstart](../LOCAL_DEVELOPMENT.md).
+
 `localhost` on an iPhone refers to the iPhone, not the Mac. The device launcher
 uses the Mac's Bonjour hostname at runtime so no personal hostname or LAN address
 is stored in the repository.
@@ -95,7 +98,7 @@ is stored in the repository.
 2. From the repository root, start the backend and confirm it is healthy:
 
    ```bash
-   docker compose up -d
+   docker compose -f backend/docker-compose.yml up -d
    curl -sf http://localhost:5000/health && echo API OK
    ```
 
@@ -104,7 +107,7 @@ is stored in the repository.
 
    ```bash
    export DUO_API_PORT=5001
-   docker compose up -d
+   docker compose -f backend/docker-compose.yml up -d
    curl -sf http://localhost:${DUO_API_PORT}/health && echo API OK
    ```
 

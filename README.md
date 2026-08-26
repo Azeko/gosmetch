@@ -66,6 +66,9 @@ This monorepo contains both halves of Duolicious:
 
 ## Run the whole app in one command
 
+For the fastest web setup and the complete Mac + physical-iPhone procedure, see
+the [local development quickstart](LOCAL_DEVELOPMENT.md).
+
 Requirements: Docker (with Compose v2.20+).
 
 ```bash
