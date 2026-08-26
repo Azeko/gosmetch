@@ -84,7 +84,7 @@ const UtilityScreen = ({
           }}
           selectable={false}
         >
-          Duolicious
+          ÐÐ¾ÑÐÑÑÑ
         </Text>
         <DefaultText
           style={{

@@ -531,7 +531,7 @@ const ConversationScreen = ({navigation, route}: NativeStackScreenProps<RootPara
 
   // Surface the other person's name in the browser tab. App.tsx's
   // `documentTitle.formatter` reads `options.title` from the focused screen
-  // and prepends it to "Duolicious". `name` is already seeded optimistically
+  // and prepends it to "ÐÐ¾ÑÐÑÑÑ". `name` is already seeded optimistically
   // from prospect-cache and refined once the API resolves, so we just track
   // whatever it currently holds.
   useLayoutEffect(() => {
@@ -901,7 +901,7 @@ const ConversationScreen = ({navigation, route}: NativeStackScreenProps<RootPara
                       marginRight: '10%',
                     }}
                   >
-                    Intros on Duolicious have to be totally unique! Try
+                    Intros on ÐÐ¾ÑÐÑÑÑ have to be totally unique! Try
                     asking {name} about something interesting on their profile...
                   </DefaultText>
                 </>

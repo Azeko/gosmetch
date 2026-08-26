@@ -71,11 +71,11 @@ const Staff = ({
   );
 };
 
-const Admin = () => <Staff label="admin" tip="Duolicious administrator" />;
+const Admin = () => <Staff label="admin" tip="ÐÐ¾ÑÐÑÑÑ administrator" />;
 
-const Bot = () => <Staff label="bot" tip="Duolicious bot" />;
+const Bot = () => <Staff label="bot" tip="ÐÐ¾ÑÐÑÑÑ bot" />;
 
-const Mod = () => <Staff label="mod" tip="Duolicious moderator" color="black" />;
+const Mod = () => <Staff label="mod" tip="ÐÐ¾ÑÐÑÑÑ moderator" color="black" />;
 
 const Gold = ({
   style = {},
@@ -435,7 +435,7 @@ const LongBio = () => <BaseLongBio numLoops={3} />;
 
 const EarlyAdopter = () => {
   const { viewRef, props } = useTooltip(
-    `Joined Duolicious in its first year`
+    `Joined ÐÐ¾ÑÐÑÑÑ in its first year`
   );
 
   return (

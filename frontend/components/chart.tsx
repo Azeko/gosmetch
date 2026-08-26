@@ -288,7 +288,7 @@ const Chart = ({name1, percentage1, name2, percentage2, ...props}: {
                 <>
                   {'\n\n'}
                   A score of {percentage1}% means that
-                  about {100 - percentage1}% people on Duolicious scored higher
+                  about {100 - percentage1}% people on ÐÐ¾ÑÐÑÑÑ scored higher
                   than that, and about {percentage1}% scored lower.
                 </>
               }

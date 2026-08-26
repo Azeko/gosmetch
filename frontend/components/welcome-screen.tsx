@@ -97,7 +97,7 @@ const ActiveMembers = ({
   numActiveMembers,
   minActiveMembers,
   color,
-  minText = 'on the Duolicious dating app',
+  minText = 'on the ÐÐ¾ÑÐÑÑÑ dating app',
 }: {
   numActiveMembers: number,
   minActiveMembers: number
@@ -608,7 +608,7 @@ const Hero = ({
         }}
       >
         {clubName ?
-          `Join ${clubName} on Duolicious` :
+          `Join ${clubName} on ÐÐ¾ÑÐÑÑÑ` :
           'Cute dates & dank memes await...'}
       </DefaultText>
     }
@@ -677,7 +677,7 @@ const finishSocialSignIn = async ({
       response.status === 429 ? 'You’re doing that too much' :
       response.status === 460 ? 'Network blocked. Are you using a VPN?' :
       response.status === 461 ? 'Your account is banned' :
-      'We couldn’t connect to Duolicious'
+      'We couldn’t connect to ÐÐ¾ÑÐÑÑÑ'
     );
     return;
   }
@@ -984,7 +984,7 @@ const EmailScreen_ = ({navigation, route}: NativeStackScreenProps<WelcomeParamLi
         response.status === 429 ? 'You’re doing that too much' :
         response.status === 460 ? 'Network blocked. Are you using a VPN?' :
         response.status === 461 ? 'Your account is banned' :
-        'We couldn’t connect to Duolicious'
+        'We couldn’t connect to ÐÐ¾ÑÐÑÑÑ'
       );
     }
   };

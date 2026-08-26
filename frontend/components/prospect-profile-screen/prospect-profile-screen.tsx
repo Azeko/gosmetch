@@ -935,7 +935,7 @@ const CurriedContent = ({navigationRef, navigation, route}: ProspectScreenProps 
 
   // Surface the prospect's name in the browser tab. We prefer the freshly
   // fetched name but fall back to the optimistic hint while the API is in
-  // flight so the title doesn't briefly read "Duolicious" before snapping
+  // flight so the title doesn't briefly read "ÐÐ¾ÑÐÑÑÑ" before snapping
   // to the name. App.tsx's `documentTitle.formatter` reads `options.title`.
   const screenTitle = data?.name ?? getProspectHint(handle)?.name;
   useLayoutEffect(() => {

@@ -214,7 +214,7 @@ const Offering = ({
                 fontSize: 16,
               }}
             >
-              Duolicious
+              ÐÐ¾ÑÐÑÑÑ
             </DefaultText>
           </View>
           {!isCompact &&

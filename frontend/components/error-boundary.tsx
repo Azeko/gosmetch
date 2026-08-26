@@ -65,7 +65,7 @@ class CallbackErrorBoundary extends Component<Props, State> {
       return (
         <View style={styles.container}>
           <Text style={styles.text}>
-            Duolicious crashed so hard we don't even have a pretty error
+            ÐÐ¾ÑÐÑÑÑ crashed so hard we don't even have a pretty error
             message.
             {'\n\n'}
             Try clearing your cache/storage or reinstalling the app.

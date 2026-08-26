@@ -393,7 +393,7 @@ const NonInteractiveQuizCard = ({children, ...props}: {
                     textAlign: 'right',
                   }}
                 >
-                  Duolicious
+                  ÐÐ¾ÑÐÑÑÑ
                 </DefaultText>
                 <Logo14
                   size={14 * 2}
@@ -420,7 +420,7 @@ const NonInteractiveQuizCard = ({children, ...props}: {
             >
               {showTutorial && questionNumber === 1 &&
                 <DefaultText style={{fontSize: adjustedFontSize * 0.8}}>
-                  👋 Welcome to Duolicious Q&A, where we pick your brain in the
+                  👋 Welcome to ÐÐ¾ÑÐÑÑÑ Q&A, where we pick your brain in the
                   quest to unearth your perfect match! Let's start with an easy
                   one:
                   {'\n\n'}

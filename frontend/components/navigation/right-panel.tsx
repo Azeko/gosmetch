@@ -55,8 +55,8 @@ const DuoliciousRightPanelContent = () => {
         Do you have a Discord server, subreddit, forum, or other social group
         you want to promote? You can do it here, for free!
         {'\n\n'}
-        What’s the catch? You’ll have to promote Duolicious back. (Plus your
-        group should be something Duolicious members would like.)
+        What’s the catch? You’ll have to promote ÐÐ¾ÑÐÑÑÑ back. (Plus your
+        group should be something ÐÐ¾ÑÐÑÑÑ members would like.)
         {'\n\n'}
         Inquiries: {}
         <DefaultText
@@ -114,7 +114,7 @@ const SponsoredRightPanelContent = () => {
         <DefaultText style={{ fontWeight: '700' }}>
         {partner.name}
         </DefaultText>
-        {} is a Duolicious partner
+        {} is a ÐÐ¾ÑÐÑÑÑ partner
       </DefaultText>
 
       <DefaultText style={{ textAlign: 'center' }}>
