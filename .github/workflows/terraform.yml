@@ -1,0 +1,81 @@
+name: Terraform test environment
+on:
+  pull_request:
+    paths: [infra/terraform/**, .github/workflows/terraform.yml]
+  push:
+    branches: [main]
+    paths: [infra/terraform/**, .github/workflows/terraform.yml]
+  workflow_dispatch:
+
+permissions: {contents: read}
+concurrency:
+  group: terraform-test
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_ROOT: infra/terraform/test
+  TF_VAR_cloud_id: ${{ vars.YC_CLOUD_ID }}
+  TF_VAR_folder_id: ${{ vars.YC_FOLDER_ID }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_KEY }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: 1.15.9}
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: infra/terraform
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+    defaults: {run: {working-directory: infra/terraform/test}}
+
+  plan:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: test-plan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: 1.15.9}
+      - name: Write provider credentials
+        env: {YC_KEY: "${{ secrets.YC_SA_KEY_JSON }}"}
+        run: |
+          test -n "$YC_KEY"
+          printf '%s' "$YC_KEY" > "$RUNNER_TEMP/yc-key.json"
+          echo "YC_SERVICE_ACCOUNT_KEY_FILE=$RUNNER_TEMP/yc-key.json" >> "$GITHUB_ENV"
+      - name: Initialize remote state
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="key=test/terraform.tfstate" -backend-config="region=ru-central1" -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" -backend-config="skip_region_validation=true" -backend-config="skip_credentials_validation=true" -backend-config="skip_requesting_account_id=true" -backend-config="skip_s3_checksum=true" -backend-config="use_lockfile=true"
+      - run: terraform plan -lock-timeout=5m -out=tfplan
+    defaults: {run: {working-directory: infra/terraform/test}}
+
+  apply:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [validate, plan]
+    runs-on: ubuntu-latest
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: 1.15.9}
+      - name: Write provider credentials
+        env: {YC_KEY: "${{ secrets.YC_SA_KEY_JSON }}"}
+        run: |
+          test -n "$YC_KEY"
+          printf '%s' "$YC_KEY" > "$RUNNER_TEMP/yc-key.json"
+          echo "YC_SERVICE_ACCOUNT_KEY_FILE=$RUNNER_TEMP/yc-key.json" >> "$GITHUB_ENV"
+      - name: Initialize remote state
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="key=test/terraform.tfstate" -backend-config="region=ru-central1" -backend-config="endpoints={s3=\"https://storage.yandexcloud.net\"}" -backend-config="skip_region_validation=true" -backend-config="skip_credentials_validation=true" -backend-config="skip_requesting_account_id=true" -backend-config="skip_s3_checksum=true" -backend-config="use_lockfile=true"
+      - run: terraform plan -lock-timeout=5m -out=tfplan
+      - run: terraform apply -lock-timeout=5m -auto-approve tfplan
+    defaults: {run: {working-directory: infra/terraform/test}}
