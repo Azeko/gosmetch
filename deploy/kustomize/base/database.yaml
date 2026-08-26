@@ -1,0 +1,20 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+  bootstrap:
+    initdb:
+      database: postgres
+      owner: gosmetch
+      secret:
+        name: postgres-app
+  storage:
+    size: 10Gi
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  backup:
+    retentionPolicy: 7d
