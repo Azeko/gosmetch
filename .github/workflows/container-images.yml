@@ -1,0 +1,88 @@
+name: Container images
+
+on:
+  push:
+    branches: [main]
+    paths: [backend/**, frontend/**, .github/workflows/container-images.yml]
+  pull_request:
+    branches: [main]
+    paths: [backend/**, frontend/**, .github/workflows/container-images.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: container-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: api, context: backend, dockerfile: backend/api.Dockerfile}
+          - {name: cron, context: backend, dockerfile: backend/cron.Dockerfile}
+          - {name: firehol, context: backend, dockerfile: backend/firehol.Dockerfile}
+          - {name: status, context: backend, dockerfile: backend/status.Dockerfile}
+          - {name: frontend, context: frontend, dockerfile: frontend/Dockerfile, target: production}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Set GHCR image prefix
+        shell: bash
+        run: |
+          echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/gosmetch" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=test
+          labels: |
+            org.opencontainers.image.title=gosmetch-${{ matrix.name }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and optionally push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            DUO_COMMIT_HASH=${{ github.sha }}
+            DUO_API_URL=${{ vars.DUO_API_URL || 'https://api.example.com' }}
+            DUO_CHAT_URL=${{ vars.DUO_CHAT_URL || 'wss://api.example.com/chat' }}
+            DUO_IMAGES_URL=${{ vars.DUO_IMAGES_URL || 'https://images.example.com' }}
+            DUO_AUDIO_URL=${{ vars.DUO_AUDIO_URL || 'https://audio.example.com' }}
+            DUO_STATUS_URL=${{ vars.DUO_STATUS_URL || 'https://status.example.com' }}
+            DUO_GOOGLE_WEB_CLIENT_ID=${{ vars.DUO_GOOGLE_WEB_CLIENT_ID || 'example.apps.googleusercontent.com' }}
+            DUO_APPLE_WEB_CLIENT_ID=${{ vars.DUO_APPLE_WEB_CLIENT_ID || 'app.example.web' }}
+            DUO_APPLE_REDIRECT_URI=${{ vars.DUO_APPLE_REDIRECT_URI || 'https://api.example.com/auth/apple/callback' }}
+            DUO_WEB_PUSH_VAPID_PUBLIC_KEY=${{ vars.DUO_WEB_PUSH_VAPID_PUBLIC_KEY }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Record published digest
+        if: github.event_name != 'pull_request'
+        run: echo "${{ matrix.name }} ${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
