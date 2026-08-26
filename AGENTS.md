@@ -15,7 +15,7 @@ paths.
 
 ## Work tracking
 
-- Reference a GitHub issue in every change.
+- Reference a GitHub issue in every change. Use gh cli.
 - Use a dedicated issue branch and worktree.
 - Include the full issue reference in each commit message, for example:
   `Refs Azeko/gosmetch#1`.
