@@ -28,7 +28,6 @@ jobs:
           - {name: api, context: backend, dockerfile: backend/api.Dockerfile}
           - {name: cron, context: backend, dockerfile: backend/cron.Dockerfile}
           - {name: firehol, context: backend, dockerfile: backend/firehol.Dockerfile}
-          - {name: postgres, context: backend, dockerfile: backend/postgres.Dockerfile}
           - {name: status, context: backend, dockerfile: backend/status.Dockerfile}
           - {name: frontend, context: frontend, dockerfile: frontend/Dockerfile, target: production}
     steps:

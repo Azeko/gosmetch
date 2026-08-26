@@ -1,8 +1,8 @@
 # Container images
 
-GitHub Actions builds the production API, cron, FireHOL, PostgreSQL, status,
-and frontend images. Pull requests build without pushing. Pushes to `main` and
-manual runs publish both `sha-<full commit SHA>` and the movable `test` tag.
+GitHub Actions builds the production API, cron, FireHOL, status, and frontend
+images. Pull requests build without pushing. Pushes to `main` and manual runs
+publish both `sha-<full commit SHA>` and the movable `test` tag.
 Deployments should pin the immutable SHA tag or the digest printed in the job
 summary. Images are published to GitHub Container Registry as
 `ghcr.io/<owner>/gosmetch-<component>`. The workflow authenticates with its
@@ -25,3 +25,50 @@ docker build -f backend/api.Dockerfile -t gosmetch-api:dev backend
 docker build --target production -f frontend/Dockerfile -t gosmetch-frontend:dev frontend
 docker run --rm -p 8080:8080 gosmetch-frontend:dev
 ```
+
+## PostgreSQL is supplied by CloudNativePG
+
+The deployment does not build or publish `backend/postgres.Dockerfile`.
+CloudNativePG manages PostgreSQL using its PostGIS operand image, and the CNPG
+`Database` resource creates the application database and required extensions:
+
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+spec:
+  instances: 1
+
+  imageName: ghcr.io/cloudnative-pg/postgis:17-3-standard-trixie
+
+  storage:
+    size: 10Gi
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: app-db
+spec:
+  name: app
+  owner: app
+
+  cluster:
+    name: postgres
+
+  extensions:
+    - name: postgis
+      ensure: present
+    - name: vector
+      ensure: present
+    - name: pg_trgm
+      ensure: present
+    - name: btree_gist
+      ensure: present
+    - name: uuid-ossp
+      ensure: present
+```
+
+The deployment must provide the `app` role credentials separately and point
+the backend at the `app` database. Pin the operand image by digest before
+promoting an environment.
