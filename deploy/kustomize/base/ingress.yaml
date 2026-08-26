@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gosmetch
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: gosmetch-tls
+      hosts: [test.example.com, api.test.example.com, status.test.example.com]
+  rules:
+    - host: test.example.com
+      http: {paths: [{path: /, pathType: Prefix, backend: {service: {name: frontend, port: {name: http}}}}]}
+    - host: api.test.example.com
+      http: {paths: [{path: /, pathType: Prefix, backend: {service: {name: api, port: {name: http}}}}]}
+    - host: status.test.example.com
+      http: {paths: [{path: /, pathType: Prefix, backend: {service: {name: status, port: {name: http}}}}]}

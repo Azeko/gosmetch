@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gosmetch-config
+data:
+  DUO_ENV: prod
+  DUO_DB_HOST: postgres-rw
+  DUO_DB_PORT: "5432"
+  DUO_DB_POOL_MIN_SIZE: "1"
+  DUO_DB_POOL_MAX_SIZE: "4"
+  DUO_REDIS_HOST: redis
+  DUO_REDIS_PORT: "6379"
+  DUO_FIREHOL_URL: http://firehol:5070
+  DUO_SMTP_HOST: CHANGE_ME
+  DUO_SMTP_PORT: "587"
+  DUO_REPORT_EMAIL: support@example.com 20 abuse@example.com 0
+  DUO_R2_BUCKET_NAME: CHANGE_ME
+  DUO_R2_AUDIO_BUCKET_NAME: CHANGE_ME
+  DUO_BOTO_ENDPOINT_URL: https://storage.yandexcloud.net
+  DUO_CORS_ORIGINS: https://test.example.com
+  DUO_GOOGLE_CLIENT_IDS: CHANGE_ME.apps.googleusercontent.com
+  DUO_APPLE_CLIENT_IDS: app.example,app.example.web
+  DUO_APPLE_WEB_REDIRECT_URL: https://api.test.example.com/auth/apple/callback
+  DUO_APPLE_APEX_REDIRECT_URL: https://test.example.com
+  DUO_APPLE_ANDROID_REDIRECT_URL: https://test.example.com
+  DUO_VAPID_SUBJECT: mailto:support@example.com
