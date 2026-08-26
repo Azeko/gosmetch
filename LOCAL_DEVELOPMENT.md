@@ -33,6 +33,42 @@ Stop everything with `Ctrl-C`, then remove the containers with:
 docker compose down
 ```
 
+## Web from source with the backend in Docker
+
+Use this workflow for frontend hot reload, or to run the web and iPhone apps
+against the same backend. Start only the backend from the repository root:
+
+```bash
+export DUO_API_PORT=5001
+docker compose -f backend/docker-compose.yml up -d --build
+curl -sf "http://localhost:${DUO_API_PORT}/health" && echo "API OK"
+```
+
+Then start the web app from a second terminal:
+
+```bash
+cd frontend
+npm install
+npx patch-package
+export DUO_STATUS_URL=http://localhost:8080
+export DUO_API_URL=http://localhost:5001
+export DUO_CHAT_URL=ws://localhost:5001/chat
+export DUO_IMAGES_URL=http://localhost:9090/s3-mock-bucket
+export DUO_AUDIO_URL=http://localhost:9090/s3-mock-audio-bucket
+npm run web
+```
+
+Expo opens the app automatically. If it does not, open
+<http://localhost:8081>. Verify the API independently at
+<http://localhost:5001/health>; a healthy response is `status: ok`.
+
+Keep the frontend terminal running. Saved JavaScript and TypeScript changes
+reload in the browser. Stop it with `Ctrl-C`.
+
+If `./run-ios-device.sh` is already running Metro for an iPhone, do not start a
+second frontend process. Focus that terminal and press `w`; Expo builds and
+opens the web app on the same port with the same runtime configuration.
+
 ## Physical iPhone with a backend on the Mac
 
 ### One-time requirements
@@ -139,7 +175,8 @@ export DUO_IOS_BUNDLE_IDENTIFIER=com.example.duolicious.dev
 ```
 
 The launcher rebuilds the app when needed and starts Metro. Once Metro is
-running, JavaScript changes reload without another native build.
+running, press `w` in its terminal to launch the web version alongside the
+iPhone app. JavaScript changes reload without another native build.
 
 ### Stop and reset
 
@@ -172,6 +209,8 @@ The volume command permanently deletes local development data.
 - **App cannot reach Metro or the API:** accept Local Network access, verify the
   Safari health check, and ensure VPN or guest Wi-Fi isolation is not blocking
   peer-to-peer traffic.
+- **Port 8081 is already in use:** reuse the existing Expo terminal and press
+  `w`, or stop the other Metro/web process before running `npm run web`.
 - **Stale Expo/native configuration:** stop Metro and run
   `npx expo prebuild --clean --platform ios`, then rerun the launcher. The
   generated `frontend/ios` directory is local and must not be committed.

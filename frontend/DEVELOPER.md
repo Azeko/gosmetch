@@ -46,6 +46,10 @@ You do not need to install the Expo CLI globally; commands are run via npm scrip
 - `npm run typecheck` – TypeScript type checks
 - `npm run lint` – ESLint
 
+When `./run-ios-device.sh` is already serving a physical iPhone, press `w` in
+that Metro terminal to open the web app with the same local backend settings.
+Do not start `npm run web` separately because both processes use port `8081`.
+
 ---
 
 ## Environment configuration
