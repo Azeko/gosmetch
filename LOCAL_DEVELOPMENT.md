@@ -154,7 +154,7 @@ or bundle identifier into tracked files.
 Local iPhone builds omit these paid-team capabilities:
 
 - Associated Domains
-- Sign in with Apple
+- Sign in with Yandex (set `DUO_YANDEX_CLIENT_ID` for a registered OAuth app)
 - Push Notifications
 
 Those features are unavailable in a Personal Team build. Production builds keep

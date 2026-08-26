@@ -447,7 +447,7 @@ CREATE TABLE IF NOT EXISTS duo_session (
 CREATE TABLE IF NOT EXISTS social_identity (
     -- 'google' | 'apple'
     provider TEXT NOT NULL,
-    -- Stable, opaque user id from the provider (Google `sub`, Apple `sub`).
+    -- Stable, opaque user id from the provider (Google `sub`, Yandex `id`).
     -- Source of truth for identity; emails can change (esp. Apple relay).
     provider_sub TEXT NOT NULL,
     person_id INT NOT NULL REFERENCES person(id) ON DELETE CASCADE ON UPDATE CASCADE,

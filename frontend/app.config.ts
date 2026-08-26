@@ -8,10 +8,9 @@ const DEEP_LINK_HOSTNAME = 'get.duolicious.app';
 const BRAND_BLUE = '#1769aa';
 const IS_LOCAL_IOS_DEV = process.env.DUO_LOCAL_IOS_DEV === '1';
 
-const withoutPaidAppleCapabilities: ConfigPlugin = (config) =>
+const withoutPaidCapabilities: ConfigPlugin = (config) =>
   withEntitlementsPlist(config, (entitlementsConfig) => {
     delete entitlementsConfig.modResults['aps-environment'];
-    delete entitlementsConfig.modResults['com.apple.developer.applesignin'];
     delete entitlementsConfig.modResults['com.apple.developer.associated-domains'];
     return entitlementsConfig;
   });
@@ -56,9 +55,7 @@ const config: ExpoConfig = {
     googleIosClientId: process.env.DUO_GOOGLE_IOS_CLIENT_ID,
     googleAndroidClientId: process.env.DUO_GOOGLE_ANDROID_CLIENT_ID,
     googleWebClientId: process.env.DUO_GOOGLE_WEB_CLIENT_ID,
-    appleWebClientId: process.env.DUO_APPLE_WEB_CLIENT_ID,
-    appleRedirectUri: process.env.DUO_APPLE_REDIRECT_URI,
-    appleAndroidReturnUrl: process.env.DUO_APPLE_ANDROID_RETURN_URL,
+    yandexClientId: process.env.DUO_YANDEX_CLIENT_ID,
     deepLinkHostname: DEEP_LINK_HOSTNAME,
   },
   web: {
@@ -67,10 +64,6 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: process.env.DUO_IOS_BUNDLE_IDENTIFIER ?? "app.duolicious",
     supportsTablet: false,
-    // App Store Guideline 4.8 requires Sign In with Apple alongside any
-    // other third-party sign-in option. The capability is added by the
-    // expo-apple-authentication plugin below.
-    usesAppleSignIn: !IS_LOCAL_IOS_DEV,
     associatedDomains: IS_LOCAL_IOS_DEV ? [] : [`applinks:${DEEP_LINK_HOSTNAME}`],
     appStoreUrl: "https://apps.apple.com/us/app/duolicious-dating-app/id6499066647",
     infoPlist: {
@@ -112,7 +105,6 @@ const config: ExpoConfig = {
     ],
   },
   plugins: [
-    ...(!IS_LOCAL_IOS_DEV ? ["expo-apple-authentication"] : []),
     "expo-image-picker",
     "expo-secure-store",
     ...(!IS_LOCAL_IOS_DEV ? [[
@@ -142,7 +134,7 @@ const config: ExpoConfig = {
         enableBackgroundPlayback: false,
       }
     ],
-    ...(IS_LOCAL_IOS_DEV ? [withoutPaidAppleCapabilities] : []),
+    ...(IS_LOCAL_IOS_DEV ? [withoutPaidCapabilities] : []),
   ] as ExpoConfig['plugins'],
 };
 

@@ -10,7 +10,6 @@ in `service.api.bootstrap`.
 
 import json
 import time
-from urllib.parse import parse_qsl
 
 from fastapi import Body, Depends, Path as FastApiPath, WebSocket
 from starlette.requests import Request
@@ -21,7 +20,6 @@ from service.api import person
 from service.api import qanda
 from service.api import search
 from serviceshared.antiabuse.lodgereport import skip_by_uuid
-from service.api.auth import apple_oauth
 from service.api.qanda import question
 from service.api.asgi import app
 from service.api.auth.bearer import session
@@ -97,47 +95,19 @@ async def post_sign_in_with_google(
         remote_addr=client_ip(request),
     )
 
-@app.post('/sign-in-with-apple')
-async def post_sign_in_with_apple(
+@app.post('/sign-in-with-yandex')
+async def post_sign_in_with_yandex(
     request: Request,
-    req: t.PostSignInWithApple,
+    req: t.PostSignInWithYandex,
     _limited: None = Depends(ip_rate_limit(
         auth_rate_limit,
         scope='social_sign_in',
     )),
 ) -> object:
-    return await person.post_sign_in_with_apple(
-        token=req.identity_token,
-        nonce=req.nonce,
+    return await person.post_sign_in_with_yandex(
+        token=req.access_token,
         pending_club_name=req.pending_club_name,
         remote_addr=client_ip(request),
-    )
-
-# Apple Sign-In web/Android OAuth callback. This remains unauthenticated:
-# Apple POSTs a form body here, which we convert into a redirect response for
-# the client-controlled return URL. See `auth/apple_oauth.py` for the rationale.
-#
-# This is on its own scope so it doesn't double-bill against
-# `social_sign_in`: a single web/Android Apple sign-in hits this
-# callback *and* /sign-in-with-apple, and we want the per-day budget
-# to be "one sign-in = one slot" not "two slots".
-@app.post('/auth/apple/callback')
-async def post_auth_apple_callback(
-    request: Request,
-    _limited: None = Depends(ip_rate_limit(
-        auth_rate_limit,
-        scope='apple_oauth_callback',
-    )),
-) -> object:
-    raw_body = await request.body()
-    form = dict(parse_qsl(
-        raw_body.decode('utf-8', 'ignore'),
-        keep_blank_values=True,
-    ))
-    return apple_oauth.handle_callback(
-        id_token=form.get('id_token') or '',
-        state=form.get('state') or '',
-        error=form.get('error'),
     )
 
 @app.post('/sign-out')

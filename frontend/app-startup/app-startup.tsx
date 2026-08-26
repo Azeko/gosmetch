@@ -30,9 +30,7 @@ import { setSignedInUser, getSignedInUser } from '../events/signed-in-user';
 import { computeStartupNavigationState } from '../navigation/startup';
 import { createLinking, focusedConversationHandle } from '../navigation/linking';
 import { resetUserScopedClientState } from '../navigation/reset-client-state';
-import { hasPendingAppleWebSignIn } from '../api/social-auth';
 import { adoptWebSessionOnApex } from '../kv-storage/session-bridge';
-import { showSignUp } from '../components/modal/sign-up-modal';
 
 ExpoSplashScreen.preventAutoHideAsync();
 
@@ -259,9 +257,6 @@ const useAppStartup = (
   useEffect(() => {
     if (isLoading) return;
     if (getSignedInUser()) return;
-    if (hasPendingAppleWebSignIn()) {
-      showSignUp(true);
-    }
   }, [isLoading]);
 
   // Poll the server status. The flag stops the loop when the effect is torn

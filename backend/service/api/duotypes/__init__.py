@@ -95,7 +95,7 @@ ClubName = Annotated[
 ]
 
 # Optional variant for /request-otp, /sign-in-with-google,
-# /sign-in-with-apple, where the client passes a pending-club-invite name.
+# /sign-in-with-yandex, where the client passes a pending-club-invite name.
 PendingClubName = Annotated[
     str | None,
     BeforeValidator(_normalize_club_name),
@@ -381,14 +381,9 @@ class PostSignInWithGoogle(BaseModel):
     )
 
 
-class PostSignInWithApple(BaseModel):
-    # Apple identity token (a JWT). Verified server-side against Apple's JWKS.
-    identity_token: str = Field(min_length=1, max_length=4096)
-    # Random hex string the client passed to Apple as the `nonce` parameter
-    # (native `signInAsync({ nonce })` on iOS, `&nonce=` URL param on
-    # web/Android). Apple echoes it verbatim into the JWT's `nonce` claim;
-    # the backend compares the two to bind the token to this client session.
-    nonce: str = Field(min_length=16, max_length=128, pattern=r'^[a-zA-Z0-9_-]+$')
+class PostSignInWithYandex(BaseModel):
+    # OAuth token obtained through authorization-code + PKCE.
+    access_token: str = Field(min_length=1, max_length=4096)
     pending_club_name: PendingClubName = Field(
         default=None,
         pattern=CLUB_PATTERN,
