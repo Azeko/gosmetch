@@ -1,10 +1,19 @@
 import { ExpoConfig } from 'expo/config';
+import { ConfigPlugin, withEntitlementsPlist } from 'expo/config-plugins';
 
 // In SDK 46 and lower, use the following import instead:
 // import { ExpoConfig } from '@expo/config-types';
 
 const DEEP_LINK_HOSTNAME = 'get.duolicious.app';
 const IS_LOCAL_IOS_DEV = process.env.DUO_LOCAL_IOS_DEV === '1';
+
+const withoutPaidAppleCapabilities: ConfigPlugin = (config) =>
+  withEntitlementsPlist(config, (entitlementsConfig) => {
+    delete entitlementsConfig.modResults['aps-environment'];
+    delete entitlementsConfig.modResults['com.apple.developer.applesignin'];
+    delete entitlementsConfig.modResults['com.apple.developer.associated-domains'];
+    return entitlementsConfig;
+  });
 
 const config: ExpoConfig = {
   name: 'Duolicious',
@@ -60,8 +69,8 @@ const config: ExpoConfig = {
     // App Store Guideline 4.8 requires Sign In with Apple alongside any
     // other third-party sign-in option. The capability is added by the
     // expo-apple-authentication plugin below.
-    usesAppleSignIn: true,
-    associatedDomains: [`applinks:${DEEP_LINK_HOSTNAME}`],
+    usesAppleSignIn: !IS_LOCAL_IOS_DEV,
+    associatedDomains: IS_LOCAL_IOS_DEV ? [] : [`applinks:${DEEP_LINK_HOSTNAME}`],
     appStoreUrl: "https://apps.apple.com/us/app/duolicious-dating-app/id6499066647",
     infoPlist: {
       NSMicrophoneUsageDescription: "This app uses the microphone to capture audio for updating and sharing on your profile.",
@@ -102,10 +111,10 @@ const config: ExpoConfig = {
     ],
   },
   plugins: [
-    "expo-apple-authentication",
+    ...(!IS_LOCAL_IOS_DEV ? ["expo-apple-authentication"] : []),
     "expo-image-picker",
     "expo-secure-store",
-    [
+    ...(!IS_LOCAL_IOS_DEV ? [[
       "expo-notifications",
       {
         "icon": "./assets/notification.png",
@@ -114,7 +123,7 @@ const config: ExpoConfig = {
           "./assets/audio/notification.mp3"
         ]
       }
-    ],
+    ]] : []),
     [
       "expo-splash-screen",
       {
@@ -132,7 +141,8 @@ const config: ExpoConfig = {
         enableBackgroundPlayback: false,
       }
     ],
-  ],
+    ...(IS_LOCAL_IOS_DEV ? [withoutPaidAppleCapabilities] : []),
+  ] as ExpoConfig['plugins'],
 };
 
 export default config;
