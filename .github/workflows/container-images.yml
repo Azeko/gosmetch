@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: container-images-${{ github.ref }}
@@ -34,32 +35,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
 
-      - name: Validate registry configuration
-        if: github.event_name != 'pull_request'
-        env:
-          REGISTRY: ${{ vars.CONTAINER_REGISTRY }}
-          PREFIX: ${{ vars.CONTAINER_IMAGE_PREFIX }}
-          USERNAME: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
-          PASSWORD: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+      - name: Set GHCR image prefix
+        shell: bash
         run: |
-          test -n "$REGISTRY" || { echo 'CONTAINER_REGISTRY is required'; exit 1; }
-          test -n "$PREFIX" || { echo 'CONTAINER_IMAGE_PREFIX is required'; exit 1; }
-          test -n "$USERNAME" || { echo 'CONTAINER_REGISTRY_USERNAME is required'; exit 1; }
-          test -n "$PASSWORD" || { echo 'CONTAINER_REGISTRY_PASSWORD is required'; exit 1; }
+          echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/gosmetch" >> "$GITHUB_ENV"
 
-      - name: Log in to the registry
+      - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          registry: ${{ vars.CONTAINER_REGISTRY }}
-          username: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
-          password: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ vars.CONTAINER_REGISTRY || 'registry.invalid' }}/${{ vars.CONTAINER_IMAGE_PREFIX || 'gosmetch' }}/${{ matrix.name }}
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}
           tags: |
             type=sha,prefix=sha-,format=long
             type=raw,value=test
