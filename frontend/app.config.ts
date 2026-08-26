@@ -1,11 +1,11 @@
 import { ExpoConfig } from 'expo/config';
-import { BRAND_BLUE } from './brand/brand';
 import { ConfigPlugin, withEntitlementsPlist } from 'expo/config-plugins';
 
 // In SDK 46 and lower, use the following import instead:
 // import { ExpoConfig } from '@expo/config-types';
 
 const DEEP_LINK_HOSTNAME = 'get.duolicious.app';
+const BRAND_BLUE = '#1769aa';
 const IS_LOCAL_IOS_DEV = process.env.DUO_LOCAL_IOS_DEV === '1';
 
 const withoutPaidAppleCapabilities: ConfigPlugin = (config) =>
