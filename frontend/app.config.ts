@@ -4,6 +4,7 @@ import { ExpoConfig } from 'expo/config';
 // import { ExpoConfig } from '@expo/config-types';
 
 const DEEP_LINK_HOSTNAME = 'get.duolicious.app';
+const IS_LOCAL_IOS_DEV = process.env.DUO_LOCAL_IOS_DEV === '1';
 
 const config: ExpoConfig = {
   name: 'Duolicious',
@@ -54,7 +55,7 @@ const config: ExpoConfig = {
     favicon: "./assets/favicon.png"
   },
   ios: {
-    bundleIdentifier: "app.duolicious",
+    bundleIdentifier: process.env.DUO_IOS_BUNDLE_IDENTIFIER ?? "app.duolicious",
     supportsTablet: false,
     // App Store Guideline 4.8 requires Sign In with Apple alongside any
     // other third-party sign-in option. The capability is added by the
@@ -65,7 +66,13 @@ const config: ExpoConfig = {
     infoPlist: {
       NSMicrophoneUsageDescription: "This app uses the microphone to capture audio for updating and sharing on your profile.",
       NSCameraUsageDescription: "This app uses the camera to capture images for verifying your profile.",
-      ITSAppUsesNonExemptEncryption: false
+      ITSAppUsesNonExemptEncryption: false,
+      ...(IS_LOCAL_IOS_DEV ? {
+        NSLocalNetworkUsageDescription: "Connect to the local development server on this network.",
+        NSAppTransportSecurity: {
+          NSAllowsLocalNetworking: true,
+        },
+      } : {}),
     },
   },
   android: {
